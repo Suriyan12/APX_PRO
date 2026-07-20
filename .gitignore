@@ -1,0 +1,27 @@
+# Environment
+.env
+.env.*
+
+# Google Secrets
+backend/gdrive-service-account.json
+android/app/google-services.json
+backend/oauth_client.json
+
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Flutter
+.dart_tool/
+build/
+
+# Android
+.gradle/
+local.properties
+
+# VS Code
+.vscode/
+
+# Android Studio
+.idea/

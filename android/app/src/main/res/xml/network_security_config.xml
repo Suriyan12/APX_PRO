@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Cleartext (plain HTTP) is permitted ONLY for the local development backend
+  (LAN IP / emulator / loopback). All other traffic must use HTTPS, so a real
+  production domain is unaffected and stays secure.
+  Update the LAN IP below if your dev PC's address changes.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">192.168.29.235</domain>
+        <domain includeSubdomains="true">192.168.1.139</domain>
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>

@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(flutter pub *)",
+      "Bash(python -c \"from app.models.models import DiscountCode, DiscountType, Appointment; print\\('models OK'\\)\")",
+      "Bash(venv\\\\Scripts\\\\python -c \"from app.models.models import DiscountCode, DiscountType, Appointment; print\\('models OK'\\)\")",
+      "mcp__visualize__read_me",
+      "Bash(dart analyze *)",
+      "Bash(grep -r \"class PdfViewerController\" \"C:/Users/Tychons/AppData/Local/Pub/Cache/hosted/pub.dev/pdfrx-1.3.5/lib/\" 2>/dev/null | head -5)",
+      "Bash(grep -v \"widget\\\\.\\\\|params\\\\.\\\\|_\\\\|//\\\\|if\\\\|call\")",
+      "Bash(flutter analyze *)",
+      "WebFetch(domain:api.github.com)"
+    ]
+  }
+}
