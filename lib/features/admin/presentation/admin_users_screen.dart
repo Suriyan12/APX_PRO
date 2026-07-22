@@ -54,223 +54,28 @@ class AdminUsersScreenState extends State<AdminUsersScreen> {
   }
 
   Future<void> _showUserFormSheet({Map<String, dynamic>? existing}) async {
-    final nameCtrl = TextEditingController(text: existing?['full_name'] as String? ?? '');
-    final emailCtrl = TextEditingController(text: existing?['email'] as String? ?? '');
-    final phoneCtrl = TextEditingController(text: existing?['phone'] as String? ?? '');
-    final passCtrl = TextEditingController();
-    String selectedRole = 'patient';
-    bool submitting = false;
-
-    await showModalBottomSheet(
+    // The sheet owns its own TextEditingControllers via [_UserFormSheet]'s
+    // State, so they are disposed in State.dispose() — which Flutter calls only
+    // after the sheet's exit transition finishes and the element is unmounted.
+    // (Disposing them here, right after the await, freed them WHILE the sheet
+    // was still animating out and rebuilding — the use-after-dispose crash.)
+    final createdName = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheetState) {
-          return Padding(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(ctx).viewInsets.bottom,
-            ),
-            child: ClipRRect(
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(32)),
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-                      child: Container(
-                        decoration: const BoxDecoration(
-                          color: Color(0x1EFFFFFF),
-                          border: Border(
-                              top: BorderSide(
-                                  color: Color(0x30FFFFFF), width: 1)),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Container(
-                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Handle bar
-                      Center(
-                        child: Container(
-                          width: 40,
-                          height: 4,
-                          margin: const EdgeInsets.only(bottom: 20),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.3),
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ),
-                      const Text(
-                        'Add New User',
-                        style: TextStyle(
-                          color: AppColors.textPrimary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 20,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      _GlassTextField(
-                          controller: nameCtrl,
-                          label: 'Full Name',
-                          icon: Icons.person_outline_rounded),
-                      const SizedBox(height: 12),
-                      _GlassTextField(
-                          controller: emailCtrl,
-                          label: 'Email',
-                          icon: Icons.email_outlined,
-                          keyboardType: TextInputType.emailAddress),
-                      const SizedBox(height: 12),
-                      _GlassTextField(
-                          controller: phoneCtrl,
-                          label: 'Phone (optional)',
-                          icon: Icons.phone_outlined,
-                          keyboardType: TextInputType.phone),
-                      const SizedBox(height: 12),
-                      _GlassTextField(
-                          controller: passCtrl,
-                          label: 'Password',
-                          icon: Icons.lock_outline_rounded,
-                          obscure: true),
-                      const SizedBox(height: 12),
-                      // Role picker
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(14),
-                        child: Stack(
-                          children: [
-                            Positioned.fill(
-                              child: BackdropFilter(
-                                filter:
-                                    ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: const Color(0x12FFFFFF),
-                                    border: Border.all(
-                                        color: const Color(0x1AFFFFFF)),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 4),
-                              child: DropdownButtonHideUnderline(
-                                child: DropdownButton<String>(
-                                  value: selectedRole,
-                                  dropdownColor: const Color(0xFF1A1B28),
-                                  isExpanded: true,
-                                  icon: const Icon(
-                                      Icons.keyboard_arrow_down_rounded,
-                                      color: AppColors.textSecondary),
-                                  items: const [
-                                    DropdownMenuItem(
-                                        value: 'patient',
-                                        child: Text('Patient',
-                                            style: TextStyle(
-                                                color:
-                                                    AppColors.textPrimary))),
-                                    DropdownMenuItem(
-                                        value: 'admin',
-                                        child: Text('Admin',
-                                            style: TextStyle(
-                                                color:
-                                                    AppColors.primary))),
-                                  ],
-                                  onChanged: (v) {
-                                    if (v != null) {
-                                      setSheetState(
-                                          () => selectedRole = v);
-                                    }
-                                  },
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      GlassButton(
-                        label: 'Create User',
-                        style: GlassButtonStyle.primary,
-                        width: double.infinity,
-                        loading: submitting,
-                        onTap: submitting
-                            ? null
-                            : () async {
-                                final name = nameCtrl.text.trim();
-                                final email = emailCtrl.text.trim();
-                                final pass = passCtrl.text;
-                                if (name.isEmpty ||
-                                    email.isEmpty ||
-                                    pass.isEmpty) {
-                                  ScaffoldMessenger.of(context)
-                                      .showSnackBar(const SnackBar(
-                                    content: Text(
-                                        'Name, email and password are required.'),
-                                    backgroundColor: AppColors.error,
-                                  ));
-                                  return;
-                                }
-                                setSheetState(
-                                    () => submitting = true);
-                                try {
-                                  await _api.post('/users/', data: {
-                                    'full_name': name,
-                                    'email': email,
-                                    'phone': phoneCtrl.text
-                                            .trim()
-                                            .isEmpty
-                                        ? null
-                                        : phoneCtrl.text.trim(),
-                                    'password': pass,
-                                    'role': selectedRole,
-                                  });
-                                  if (ctx.mounted)
-                                    Navigator.of(ctx).pop();
-                                  _loadUsers();
-                                  if (mounted) {
-                                    ScaffoldMessenger.of(context)
-                                        .showSnackBar(SnackBar(
-                                      content: Text(
-                                          '$name created successfully.'),
-                                      backgroundColor:
-                                          AppColors.success,
-                                    ));
-                                  }
-                                } on ApiException catch (e) {
-                                  setSheetState(
-                                      () => submitting = false);
-                                  if (mounted) {
-                                    ScaffoldMessenger.of(context)
-                                        .showSnackBar(SnackBar(
-                                      content: Text(e.message),
-                                      backgroundColor: AppColors.error,
-                                    ));
-                                  }
-                                }
-                              },
-                      ),
-                    ],
-                  ),
-                ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
+      builder: (ctx) => _UserFormSheet(api: _api, existing: existing),
     );
 
-    nameCtrl.dispose();
-    emailCtrl.dispose();
-    phoneCtrl.dispose();
-    passCtrl.dispose();
+    // On success the sheet pops with the created user's name.
+    if (createdName != null) {
+      _loadUsers();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('$createdName created successfully.'),
+          backgroundColor: AppColors.success,
+        ));
+      }
+    }
   }
 
   Future<void> _toggleStatus(Map<String, dynamic> user) async {
@@ -697,6 +502,229 @@ class AdminUsersScreenState extends State<AdminUsersScreen> {
           fontWeight: FontWeight.bold,
           color: color,
           letterSpacing: 0.6,
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Create-user bottom sheet ───────────────────────────────────────────────
+//
+// A StatefulWidget so the four TextEditingControllers live for the exact
+// lifetime of the sheet's element. They are created once in initState (never in
+// build) and freed in dispose(), which Flutter invokes only after the sheet is
+// fully removed from the tree — so no rebuild during the exit transition can
+// touch a disposed controller. On success it pops with the created user's name.
+
+class _UserFormSheet extends StatefulWidget {
+  final ApiClient api;
+  final Map<String, dynamic>? existing;
+
+  const _UserFormSheet({required this.api, this.existing});
+
+  @override
+  State<_UserFormSheet> createState() => _UserFormSheetState();
+}
+
+class _UserFormSheetState extends State<_UserFormSheet> {
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _emailCtrl;
+  late final TextEditingController _phoneCtrl;
+  late final TextEditingController _passCtrl;
+
+  String _selectedRole = 'patient';
+  bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final e = widget.existing;
+    _nameCtrl = TextEditingController(text: e?['full_name'] as String? ?? '');
+    _emailCtrl = TextEditingController(text: e?['email'] as String? ?? '');
+    _phoneCtrl = TextEditingController(text: e?['phone'] as String? ?? '');
+    _passCtrl = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _emailCtrl.dispose();
+    _phoneCtrl.dispose();
+    _passCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final name = _nameCtrl.text.trim();
+    final email = _emailCtrl.text.trim();
+    final pass = _passCtrl.text;
+    if (name.isEmpty || email.isEmpty || pass.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Name, email and password are required.'),
+        backgroundColor: AppColors.error,
+      ));
+      return;
+    }
+    setState(() => _submitting = true);
+    try {
+      await widget.api.post('/users/', data: {
+        'full_name': name,
+        'email': email,
+        'phone': _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
+        'password': pass,
+        'role': _selectedRole,
+      });
+      // Success — hand the name back to the caller, which refreshes the list
+      // and shows the confirmation snackbar after the sheet has closed.
+      if (mounted) Navigator.of(context).pop(name);
+    } on ApiException catch (e) {
+      if (mounted) {
+        setState(() => _submitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.message),
+          backgroundColor: AppColors.error,
+        ));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                child: Container(
+                  decoration: const BoxDecoration(
+                    color: Color(0x1EFFFFFF),
+                    border: Border(
+                        top: BorderSide(color: Color(0x30FFFFFF), width: 1)),
+                  ),
+                ),
+              ),
+            ),
+            // Scrollable so a raised keyboard can never cause a RenderFlex
+            // overflow on short screens.
+            SingleChildScrollView(
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Handle bar
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 20),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.3),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const Text(
+                      'Add New User',
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 20,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    _GlassTextField(
+                        controller: _nameCtrl,
+                        label: 'Full Name',
+                        icon: Icons.person_outline_rounded),
+                    const SizedBox(height: 12),
+                    _GlassTextField(
+                        controller: _emailCtrl,
+                        label: 'Email',
+                        icon: Icons.email_outlined,
+                        keyboardType: TextInputType.emailAddress),
+                    const SizedBox(height: 12),
+                    _GlassTextField(
+                        controller: _phoneCtrl,
+                        label: 'Phone (optional)',
+                        icon: Icons.phone_outlined,
+                        keyboardType: TextInputType.phone),
+                    const SizedBox(height: 12),
+                    _GlassTextField(
+                        controller: _passCtrl,
+                        label: 'Password',
+                        icon: Icons.lock_outline_rounded,
+                        obscure: true),
+                    const SizedBox(height: 12),
+                    // Role picker
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: BackdropFilter(
+                              filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: const Color(0x12FFFFFF),
+                                  border: Border.all(
+                                      color: const Color(0x1AFFFFFF)),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 4),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: _selectedRole,
+                                dropdownColor: const Color(0xFF1A1B28),
+                                isExpanded: true,
+                                icon: const Icon(
+                                    Icons.keyboard_arrow_down_rounded,
+                                    color: AppColors.textSecondary),
+                                items: const [
+                                  DropdownMenuItem(
+                                      value: 'patient',
+                                      child: Text('Patient',
+                                          style: TextStyle(
+                                              color: AppColors.textPrimary))),
+                                  DropdownMenuItem(
+                                      value: 'admin',
+                                      child: Text('Admin',
+                                          style: TextStyle(
+                                              color: AppColors.primary))),
+                                ],
+                                onChanged: (v) {
+                                  if (v != null) {
+                                    setState(() => _selectedRole = v);
+                                  }
+                                },
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    GlassButton(
+                      label: 'Create User',
+                      style: GlassButtonStyle.primary,
+                      width: double.infinity,
+                      loading: _submitting,
+                      onTap: _submitting ? null : _submit,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
