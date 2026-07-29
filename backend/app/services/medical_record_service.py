@@ -78,7 +78,8 @@ class MedicalRecordService:
         current_user: User,
         file_name: str,
         content_type: Optional[str],
-        data: bytes,
+        fileobj,
+        file_size: int,
         category: Optional[str] = None,
         patient_id: Optional[uuid.UUID] = None,
     ) -> MedicalRecord:
@@ -105,26 +106,28 @@ class MedicalRecordService:
             )
 
         max_bytes = settings.MEDICAL_RECORD_MAX_FILE_SIZE_MB * 1024 * 1024
-        if len(data) == 0:
+        if file_size == 0:
             raise MedicalRecordValidationError("Uploaded file is empty.")
-        if len(data) > max_bytes:
+        if file_size > max_bytes:
             raise MedicalRecordValidationError(
                 f"File exceeds the {settings.MEDICAL_RECORD_MAX_FILE_SIZE_MB} MB limit.",
                 status_code=413,
             )
 
         # Prefer the folder id already recorded for this patient (avoids a Drive
-        # round-trip). upload_to_patient self-heals if that id is stale — e.g.
-        # after a Google account change — by rediscovering/recreating the folder
-        # and returning the id actually used, which we then persist.
+        # round-trip). upload_stream_to_patient self-heals if that id is stale —
+        # e.g. after a Google account change — by rediscovering/recreating the
+        # folder and returning the id actually used, which we then persist.
+        # The file is streamed (not buffered) straight from the disk-backed
+        # UploadFile to Drive, so server memory stays bounded.
         preferred_folder_id = self.repo.latest_folder_id_for_patient(target_patient_id)
         # uuid prefix prevents collisions between same-named uploads
         drive_name = f"{uuid.uuid4().hex[:8]}_{safe_name}"
-        drive_file_id, folder_id = self.drive.upload_to_patient(
+        drive_file_id, folder_id = self.drive.upload_stream_to_patient(
             patient_key=str(target_patient_id),
             file_name=drive_name,
             mime_type=mime_type,
-            data=data,
+            fileobj=fileobj,
             preferred_folder_id=preferred_folder_id,
         )
 
@@ -137,7 +140,7 @@ class MedicalRecordService:
                 file_name=safe_name,
                 file_extension=extension,
                 mime_type=mime_type,
-                file_size=len(data),
+                file_size=file_size,
                 category=category.strip()[:50] if category else None,
             )
         except Exception:

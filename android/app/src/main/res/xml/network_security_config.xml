@@ -1,16 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Cleartext (plain HTTP) is permitted ONLY for the local development backend
-  (LAN IP / emulator / loopback). All other traffic must use HTTPS, so a real
-  production domain is unaffected and stays secure.
-  Update the LAN IP below if your dev PC's address changes.
+  RELEASE (production) network policy: cleartext HTTP is DISABLED everywhere.
+  All traffic must be HTTPS. The production API base URL is supplied at build
+  time via a dart-define named API_BASE_URL set to your https endpoint.
+
+  Cleartext to the local dev backend (LAN IP / emulator / loopback) is allowed
+  ONLY in debug builds, via the debug source set's network_security_config.xml,
+  which overrides this file for the debug build type.
 -->
 <network-security-config>
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">192.168.29.235</domain>
-        <domain includeSubdomains="true">192.168.1.139</domain>
-        <domain includeSubdomains="true">10.0.2.2</domain>
-        <domain includeSubdomains="true">localhost</domain>
-        <domain includeSubdomains="true">127.0.0.1</domain>
-    </domain-config>
+    <base-config cleartextTrafficPermitted="false" />
 </network-security-config>

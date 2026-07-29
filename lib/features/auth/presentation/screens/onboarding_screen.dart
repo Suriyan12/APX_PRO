@@ -16,11 +16,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   final List<OnboardingItem> _slides = [
     OnboardingItem(
-      title: 'APX Scan Posture Check',
-      description: 'Upload video scans of your posture. Our senior mobile team and physiotherapists evaluate alignment to prevent injuries.',
-      icon: Icons.camera_alt_rounded,
-    ),
-    OnboardingItem(
       title: 'Personalized Rehab programs',
       description: 'Gain access to premium, daily exercise modules crafted specifically for rehabilitation and muscle recovery.',
       icon: Icons.fitness_center_rounded,

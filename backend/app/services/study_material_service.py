@@ -45,6 +45,25 @@ class StudyMaterialService:
             preferred_folder_id=preferred_folder_id,
         )
 
+    def store_stream(
+        self,
+        category: str,
+        file_name: str,
+        mime_type: str,
+        fileobj,
+        preferred_folder_id: Optional[str] = None,
+    ) -> Tuple[str, str]:
+        """Resumable, bounded-memory upload from a file-like object (e.g. the
+        disk-backed UploadFile.file) into StudyMaterials/<Category>/. Avoids
+        buffering the whole file in RAM. Returns (drive_file_id, folder_id)."""
+        return self.drive.upload_stream_to_subfolder(
+            root_name=STUDY_MATERIALS_ROOT,
+            sub_name=_sanitize_folder_name(category),
+            file_name=file_name,
+            mime_type=mime_type,
+            fileobj=fileobj,
+        )
+
     def read(self, file_id: str) -> bytes:
         """Download raw bytes for streaming through FastAPI."""
         return self.drive.download_file(file_id)

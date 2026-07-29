@@ -176,19 +176,26 @@ class AppointmentService:
                     detail="This discount code has just reached its usage limit.",
                 )
 
-        return self.repo.create(
-            patient_id=current_user.id,
-            admin_id=appointment_in.admin_id,
-            start_time=start,
-            end_time=end,
-            notes=appointment_in.notes,
-            consultation_type=appointment_in.consultation_type,
-            consultation_fee=CONSULTATION_FEE,
-            discount_code_id=discount_code_id,
-            discount_code_used=discount_code_used,
-            discount_amount=discount_amount,
-            final_amount=final_amount,
-        )
+        try:
+            return self.repo.create(
+                patient_id=current_user.id,
+                admin_id=appointment_in.admin_id,
+                start_time=start,
+                end_time=end,
+                notes=appointment_in.notes,
+                consultation_type=appointment_in.consultation_type,
+                consultation_fee=CONSULTATION_FEE,
+                discount_code_id=discount_code_id,
+                discount_code_used=discount_code_used,
+                discount_amount=discount_amount,
+                final_amount=final_amount,
+            )
+        except Exception:
+            # The discount count was already incremented above; if the booking
+            # insert fails, give it back so the code isn't silently burned.
+            if discount_code_id:
+                self.repo.restore_discount_count(discount_code_id)
+            raise
 
     # ------------------------------------------------------------------
     # Approve / Reject (admin only)
