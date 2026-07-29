@@ -64,14 +64,19 @@ async def upload_medical_record(
 ):
     """Upload a medical record (PDF/JPG/JPEG/PNG). Patients upload for
     themselves; admins may upload on behalf of a patient via patient_id."""
-    data = await file.read()
+    # Measure the disk-backed upload without reading it into memory, then stream
+    # it to Drive (bounded server memory — no full-file buffering).
+    file.file.seek(0, 2)  # SEEK_END
+    file_size = file.file.tell()
+    file.file.seek(0)
     service = MedicalRecordService(db)
     try:
         record = service.upload(
             current_user=current_user,
             file_name=file.filename or "document",
             content_type=file.content_type,
-            data=data,
+            fileobj=file.file,
+            file_size=file_size,
             category=category,
             patient_id=patient_id,
         )

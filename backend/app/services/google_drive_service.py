@@ -364,6 +364,32 @@ class GoogleDriveService:
             folder_id = self.ensure_subfolder(root_name, sub_name)
             return self.upload_stream(folder_id, file_name, mime_type, fileobj), folder_id
 
+    def upload_stream_to_patient(
+        self,
+        patient_key: str,
+        file_name: str,
+        mime_type: str,
+        fileobj,
+        preferred_folder_id: Optional[str] = None,
+    ) -> tuple[str, str]:
+        """Resumable, bounded-memory upload into MedicalRecords/Patient_<key>/,
+        self-healing on stale folder ids (same recovery semantics as
+        _upload_with_recovery, but streamed). Returns
+        (drive_file_id, folder_id_actually_used)."""
+        folder_id = preferred_folder_id or self.ensure_patient_folder(patient_key)
+        try:
+            return self.upload_stream(folder_id, file_name, mime_type, fileobj), folder_id
+        except GoogleDriveError as e:
+            if e.status_code != 404:
+                raise
+            logger.warning(
+                "Drive folder %s not found (stale/deleted); rediscovering and "
+                "retrying streamed patient upload.", folder_id,
+            )
+            self.invalidate_folder_cache()
+            folder_id = self.ensure_patient_folder(patient_key)
+            return self.upload_stream(folder_id, file_name, mime_type, fileobj), folder_id
+
     def download_file(self, file_id: str) -> bytes:
         service = self._get_service()
         from googleapiclient.http import MediaIoBaseDownload

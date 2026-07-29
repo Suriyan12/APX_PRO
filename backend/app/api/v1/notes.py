@@ -20,6 +20,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core.audit import audit_admin
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.ranges import parse_range
@@ -93,6 +94,17 @@ def _require_admin(user: User):
 
 def _get_file_extension(filename: str) -> str:
     return filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+
+
+def _spooled_size(file: UploadFile) -> int:
+    """Size of an UploadFile without reading it into memory. Starlette spools
+    uploads to a temp file past 1 MB, so we can measure via seek/tell and then
+    stream the file object straight to Drive (bounded memory)."""
+    f = file.file
+    f.seek(0, 2)  # SEEK_END
+    size = f.tell()
+    f.seek(0)
+    return size
 
 
 def _extract_docx_content(file_bytes: bytes) -> dict:
@@ -176,12 +188,14 @@ def initiate_purchase(
     if _has_notes_access(current_user, db):
         return {"status": "already_granted", "dev_mode": settings.DEVELOPMENT_MODE}
 
-    if settings.DEVELOPMENT_MODE:
+    if settings.DEVELOPMENT_MODE and not settings.is_production:
         # Auto-grant in dev
         purchase = NotesPurchase(
             user_id=current_user.id,
             razorpay_order_id="DEV_MODE",
-            razorpay_payment_id="DEV_MODE",
+            # Per-user sentinel (not a bare "DEV_MODE") so the production
+            # unique index on razorpay_payment_id never collides in dev.
+            razorpay_payment_id=f"DEV_{current_user.id}",
             amount=settings.NOTES_PRICE / 100,
             is_active=True,
         )
@@ -231,7 +245,7 @@ def verify_purchase(
     if _has_notes_access(current_user, db):
         return NotesPurchaseGrantResponse(status="already_granted")
 
-    if not settings.DEVELOPMENT_MODE:
+    if not (settings.DEVELOPMENT_MODE and not settings.is_production):
         generated = hmac.new(
             settings.RAZORPAY_KEY_SECRET.encode(),
             f"{verify_in.razorpay_order_id}|{verify_in.razorpay_payment_id}".encode(),
@@ -424,9 +438,9 @@ async def upload_note(
             detail=f"File type .{ext} not allowed. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
         )
 
-    file_bytes = await file.read()
+    file_size = _spooled_size(file)
     max_bytes = settings.STUDY_MATERIAL_MAX_FILE_SIZE_MB * 1024 * 1024
-    if len(file_bytes) > max_bytes:
+    if file_size > max_bytes:
         raise HTTPException(
             status_code=413,
             detail=f"File too large. Maximum {settings.STUDY_MATERIAL_MAX_FILE_SIZE_MB} MB.",
@@ -434,11 +448,12 @@ async def upload_note(
 
     content_type = CONTENT_TYPE_MAP.get(ext, "application/octet-stream")
     try:
-        file_id, folder_id = StudyMaterialService().store(
+        # Stream the disk-backed upload straight to Drive (bounded memory).
+        file_id, folder_id = StudyMaterialService().store_stream(
             category=category,
             file_name=file.filename or f"note.{ext}",
             mime_type=content_type,
-            data=file_bytes,
+            fileobj=file.file,
         )
     except GoogleDriveError as e:
         raise HTTPException(status_code=e.status_code, detail=e.message)
@@ -453,7 +468,7 @@ async def upload_note(
         google_drive_folder_id=folder_id,
         mime_type=content_type,
         file_type=NoteFileType(ext),
-        file_size=len(file_bytes),
+        file_size=file_size,
         is_free=is_free,
         price=price,
         uploaded_by=current_user.id,
@@ -511,12 +526,12 @@ async def update_note(
         note.price = price
 
     if file is not None and file.filename:
-        file_bytes = await file.read()
         ext = _get_file_extension(file.filename)
         if ext not in ALLOWED_EXTENSIONS:
             raise HTTPException(status_code=400, detail=f"File type .{ext} not allowed")
+        file_size = _spooled_size(file)
         max_bytes = settings.STUDY_MATERIAL_MAX_FILE_SIZE_MB * 1024 * 1024
-        if len(file_bytes) > max_bytes:
+        if file_size > max_bytes:
             raise HTTPException(
                 status_code=413,
                 detail=f"File too large. Maximum {settings.STUDY_MATERIAL_MAX_FILE_SIZE_MB} MB.",
@@ -524,11 +539,11 @@ async def update_note(
         content_type = CONTENT_TYPE_MAP.get(ext, "application/octet-stream")
         svc = StudyMaterialService()
         try:
-            new_file_id, new_folder_id = svc.store(
+            new_file_id, new_folder_id = svc.store_stream(
                 category=note.category,
                 file_name=file.filename,
                 mime_type=content_type,
-                data=file_bytes,
+                fileobj=file.file,
             )
         except GoogleDriveError as e:
             raise HTTPException(status_code=e.status_code, detail=e.message)
@@ -543,7 +558,7 @@ async def update_note(
         note.google_drive_folder_id = new_folder_id
         note.mime_type = content_type
         note.file_type = NoteFileType(ext)
-        note.file_size = len(file_bytes)
+        note.file_size = file_size
 
     db.commit()
     db.refresh(note)
@@ -580,6 +595,7 @@ def delete_note(
     # Hard delete — no soft-delete rows left behind.
     db.delete(note)
     db.commit()
+    audit_admin("note.delete", actor=current_user, target_id=note_id)
     return {"status": "deleted"}
 
 
@@ -628,4 +644,8 @@ def admin_grant_access(
 
     user.has_notes_access = req.grant
     db.commit()
+    audit_admin(
+        "notes.grant_access" if req.grant else "notes.revoke_access",
+        actor=current_user, target_id=req.user_id,
+    )
     return {"user_id": str(req.user_id), "has_notes_access": req.grant}

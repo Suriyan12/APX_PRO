@@ -3,7 +3,6 @@ import 'package:apx_pro/core/theme/app_theme_extension.dart';
 import 'package:apx_pro/core/theme/glass.dart';
 import 'package:apx_pro/features/dashboard/presentation/home_tab.dart';
 import 'package:apx_pro/features/rehab/presentation/screens/programs_tab.dart';
-import 'package:apx_pro/features/scan/presentation/scan_tab.dart';
 import 'package:apx_pro/features/consultation/presentation/consultation_tab.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -19,7 +18,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   static const _tabs = [
     HomeTab(),
     ProgramsTab(),
-    ScanTab(),
     ConsultationTab(),
   ];
 
@@ -33,11 +31,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       icon: Icons.fitness_center_outlined,
       activeIcon: Icons.fitness_center_rounded,
       label: 'Programs',
-    ),
-    GlassNavItem(
-      icon: Icons.videocam_outlined,
-      activeIcon: Icons.videocam_rounded,
-      label: 'APX Scan',
     ),
     GlassNavItem(
       icon: Icons.calendar_month_outlined,

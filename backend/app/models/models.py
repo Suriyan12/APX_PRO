@@ -111,6 +111,10 @@ class PasswordResetToken(Base):
     token = Column(String(512), unique=True, nullable=False, index=True)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     used = Column(Boolean, nullable=False, default=False)
+    # Wrong-OTP tries against this token. Caps brute-force of the 6-digit reset
+    # OTP (1M space) during its 10-min TTL; reset to 0 once the OTP is exchanged
+    # for the opaque reset token.
+    attempts = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime(timezone=True), default=_utcnow)
 
     user = relationship("User", back_populates="password_reset_tokens")
@@ -137,12 +141,14 @@ class Appointment(Base):
     __tablename__ = "appointments"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    patient_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    patient_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     admin_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    start_time = Column(DateTime(timezone=True), nullable=False)
+    # Indexed: availability + overlap checks filter heavily on start_time, and
+    # "my appointments" filters on patient_id (above).
+    start_time = Column(DateTime(timezone=True), nullable=False, index=True)
     end_time = Column(DateTime(timezone=True), nullable=False)
-    # SCHEDULED is the initial status for all API-created appointments.
-    # PENDING is reserved for a future payment-confirmation flow.
+    # New bookings start PENDING and await admin approval; APPROVED/REJECTED/
+    # CANCELLED/COMPLETED follow from there. (SCHEDULED/RESCHEDULED are legacy.)
     status = Column(SQLEnum(AppointmentStatus), nullable=False, default=AppointmentStatus.PENDING)
     # Physical (in-person) vs Online (video). Chosen by the patient at booking.
     # `values_callable` persists/reads the lowercase VALUE ('physical'/'online')

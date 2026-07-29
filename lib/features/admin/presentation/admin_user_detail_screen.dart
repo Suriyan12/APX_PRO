@@ -23,10 +23,8 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
       MedicalRecordsRepository(_api);
 
   Map<String, dynamic>? _user;
-  List<Map<String, dynamic>> _reports = [];
   List<MedicalRecord> _medicalRecords = [];
   bool _loadingUser = true;
-  bool _loadingReports = true;
   bool _loadingRecords = true;
   bool _togglingStatus = false;
   String? _downloadingRecordId;
@@ -34,35 +32,22 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _loadUserAndReports();
+    _loadUser();
     _loadMedicalRecords();
   }
 
-  Future<void> _loadUserAndReports() async {
-    setState(() {
-      _loadingUser = true;
-      _loadingReports = true;
-    });
+  Future<void> _loadUser() async {
+    setState(() => _loadingUser = true);
     try {
-      final results = await Future.wait([
-        _api.get('/users/${widget.userId}'),
-        _api.get('/reports/', queryParameters: {'patient_id': widget.userId}),
-      ]);
+      final resp = await _api.get('/users/${widget.userId}');
       if (mounted) {
         setState(() {
-          _user = results[0].data as Map<String, dynamic>;
-          _reports = (results[1].data as List).cast<Map<String, dynamic>>();
+          _user = resp.data as Map<String, dynamic>;
           _loadingUser = false;
-          _loadingReports = false;
         });
       }
     } catch (_) {
-      if (mounted) {
-        setState(() {
-          _loadingUser = false;
-          _loadingReports = false;
-        });
-      }
+      if (mounted) setState(() => _loadingUser = false);
     }
   }
 
@@ -382,17 +367,6 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
                           ],
                           const SizedBox(height: 24),
                           const Text(
-                            'Medical Reports',
-                            style: TextStyle(
-                              color: AppColors.textPrimary,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          _buildReportsList(),
-                          const SizedBox(height: 24),
-                          const Text(
                             'Medical Records',
                             style: TextStyle(
                               color: AppColors.textPrimary,
@@ -530,28 +504,6 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
     );
   }
 
-  Widget _buildReportsList() {
-    if (_loadingReports) {
-      return const Center(
-          child: CircularProgressIndicator(color: AppColors.primary));
-    }
-    if (_reports.isEmpty) {
-      return GlassCard(
-        padding: const EdgeInsets.all(20),
-        child: const Center(
-          child: Text(
-            'No medical reports uploaded.',
-            style: TextStyle(color: AppColors.textSecondary),
-          ),
-        ),
-      );
-    }
-
-    return Column(
-      children: _reports.map((report) => _buildReportCard(report)).toList(),
-    );
-  }
-
   Widget _buildMedicalRecordsList() {
     if (_loadingRecords) {
       return const Center(
@@ -656,135 +608,4 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
     );
   }
 
-  Widget _buildReportCard(Map<String, dynamic> report) {
-    final title = report['title'] as String? ?? 'Untitled Report';
-    final fileType = (report['file_type'] as String? ?? '').toLowerCase();
-    final uploadDate = _formatDate(report['uploaded_at'] as String?);
-
-    final isPdf = fileType.contains('pdf');
-    final isImage = fileType.contains('image') ||
-        fileType.contains('jpeg') ||
-        fileType.contains('png');
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: GlassCard(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: isPdf
-                    ? AppColors.error.withValues(alpha: 0.1)
-                    : isImage
-                        ? AppColors.secondary.withValues(alpha: 0.1)
-                        : AppColors.primary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                isPdf
-                    ? Icons.picture_as_pdf_rounded
-                    : isImage
-                        ? Icons.image_rounded
-                        : Icons.insert_drive_file_rounded,
-                color: isPdf
-                    ? AppColors.error
-                    : isImage
-                        ? AppColors.secondary
-                        : AppColors.primary,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    'Uploaded $uploadDate',
-                    style: const TextStyle(
-                        color: AppColors.textMuted, fontSize: 11),
-                  ),
-                ],
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.open_in_new_rounded,
-                  color: AppColors.primary, size: 18),
-              tooltip: 'View Report',
-              onPressed: () => _viewReport(report['id'] as String?),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _viewReport(String? reportId) async {
-    if (reportId == null) return;
-    try {
-      final resp = await _api.get('/reports/$reportId/view-url');
-      final url = resp.data['view_url'] as String;
-      // Show URL in dialog — admin reads in browser
-      if (mounted) {
-        showGlassDialog<void>(
-          context: context,
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'View Report',
-                  style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Copy this URL and open it in a new browser tab to view the report. The link is valid for 1 hour.',
-                  style:
-                      TextStyle(color: AppColors.textSecondary, fontSize: 13),
-                ),
-                const SizedBox(height: 12),
-                GlassCard(
-                  padding: const EdgeInsets.all(10),
-                  child: SelectableText(
-                    url,
-                    style: const TextStyle(
-                        color: AppColors.primary, fontSize: 11),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                GlassButton(
-                  label: 'Close',
-                  onTap: () => Navigator.of(context).pop(),
-                  style: GlassButtonStyle.ghost,
-                  width: double.infinity,
-                ),
-              ],
-            ),
-          ),
-        );
-      }
-    } on ApiException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message), backgroundColor: AppColors.error),
-        );
-      }
-    }
-  }
 }

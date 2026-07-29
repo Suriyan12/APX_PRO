@@ -6,8 +6,6 @@ import 'package:apx_pro/core/theme/glass.dart';
 import 'package:apx_pro/features/admin/presentation/admin_users_screen.dart';
 import 'package:apx_pro/features/admin/presentation/admin_appointments_screen.dart';
 import 'package:apx_pro/features/notes/presentation/screens/admin/admin_notes_screen.dart';
-// NOTE: AdminScansScreen (APX Scan) is intentionally kept in the project but
-// removed from the Admin Panel navigation for now; it can be re-enabled later.
 
 class AdminPanelScreen extends StatefulWidget {
   const AdminPanelScreen({super.key});

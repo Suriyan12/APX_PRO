@@ -44,6 +44,7 @@ OTP_TTL_MINUTES = 10
 OTP_MAX_ATTEMPTS = 5
 OTP_RESEND_COOLDOWN_SECONDS = 60
 RESET_TOKEN_TTL_MINUTES = 15
+RESET_OTP_MAX_ATTEMPTS = 5   # wrong tries on a password-reset OTP before lockout
 
 # Client-recognizable prefix: the app routes to the verification screen on it.
 NOT_VERIFIED_DETAIL = (
@@ -340,9 +341,14 @@ class AuthService:
     def issue_tokens(self, user: User) -> TokenResponse:
         access_token = create_access_token(subject=user.id)
         refresh_token = create_refresh_token(subject=user.id)
-        expires_at = datetime.now(timezone.utc) + timedelta(
-            days=settings.REFRESH_TOKEN_EXPIRE_DAYS
-        )
+        now = datetime.now(timezone.utc)
+        expires_at = now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+        # Housekeeping: drop this user's already-expired refresh tokens so the
+        # table doesn't grow unbounded across logins.
+        self.db.query(RefreshToken).filter(
+            RefreshToken.user_id == user.id,
+            RefreshToken.expires_at < now,
+        ).delete(synchronize_session=False)
         self.db.add(RefreshToken(user_id=user.id, token=refresh_token, expires_at=expires_at))
         self.db.commit()
         return TokenResponse(
@@ -413,18 +419,23 @@ class AuthService:
         user = self.db.query(User).filter(User.email == email).first()
         if not user:
             raise HTTPException(status_code=400, detail="Invalid OTP.")
+        # Fetch the account's active reset token (there is at most one — starting
+        # a reset deletes prior unused ones) so a wrong OTP can be COUNTED. We no
+        # longer filter by the OTP hash: matching in Python lets us increment the
+        # attempts counter and lock the token after RESET_OTP_MAX_ATTEMPTS,
+        # preventing brute-force of the 6-digit code.
         db_token = (
             self.db.query(PasswordResetToken)
             .filter(
                 PasswordResetToken.user_id == user.id,
-                PasswordResetToken.token == hash_otp(otp),
                 PasswordResetToken.used == False,  # noqa: E712
             )
+            .order_by(PasswordResetToken.created_at.desc())
             .first()
         )
         if not db_token:
             raise HTTPException(
-                status_code=400, detail="Invalid OTP. Please check and try again."
+                status_code=400, detail="Invalid OTP. Please request a new one."
             )
         if _utc(db_token.expires_at) < datetime.now(timezone.utc):
             self.db.delete(db_token)
@@ -432,9 +443,35 @@ class AuthService:
             raise HTTPException(
                 status_code=400, detail="OTP has expired. Please request a new one."
             )
+        if db_token.attempts >= RESET_OTP_MAX_ATTEMPTS:
+            self.db.delete(db_token)
+            self.db.commit()
+            raise HTTPException(
+                status_code=400,
+                detail="Too many incorrect attempts. Please request a new code.",
+            )
+        if hash_otp(otp) != db_token.token:
+            db_token.attempts += 1
+            remaining = RESET_OTP_MAX_ATTEMPTS - db_token.attempts
+            if remaining <= 0:
+                self.db.delete(db_token)
+                self.db.commit()
+                raise HTTPException(
+                    status_code=400,
+                    detail="Too many incorrect attempts. Please request a new code.",
+                )
+            self.db.commit()
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid OTP. {remaining} attempts remaining.",
+            )
+
+        # Correct OTP — exchange it for an opaque, single-use reset token and
+        # reset the attempts counter for the new token's own lifetime.
         import secrets
         reset_token = secrets.token_urlsafe(32)
         db_token.token = hash_otp(reset_token)
+        db_token.attempts = 0
         db_token.expires_at = datetime.now(timezone.utc) + timedelta(
             minutes=RESET_TOKEN_TTL_MINUTES
         )

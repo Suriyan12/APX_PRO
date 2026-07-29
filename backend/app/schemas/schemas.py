@@ -7,6 +7,23 @@ from app.models.models import UserRole, AppointmentStatus, ConsultationType, Sca
 
 # --- USER & AUTH SCHEMAS ---
 
+# bcrypt only hashes the first 72 BYTES of a password, so anything longer is
+# silently truncated (two different long passwords could then collide). Cap at
+# 72 and require a minimum mix so credentials are not trivially guessable.
+PASSWORD_MIN = 8
+PASSWORD_MAX = 72
+
+
+def validate_password_strength(v: str) -> str:
+    if v is None or len(v) < PASSWORD_MIN:
+        raise ValueError(f"Password must be at least {PASSWORD_MIN} characters.")
+    if len(v) > PASSWORD_MAX:
+        raise ValueError(f"Password must be at most {PASSWORD_MAX} characters.")
+    if not any(c.isalpha() for c in v) or not any(c.isdigit() for c in v):
+        raise ValueError("Password must contain at least one letter and one number.")
+    return v
+
+
 class UserBase(BaseModel):
     email: EmailStr
     full_name: str
@@ -14,10 +31,15 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
-    password: str = Field(..., min_length=8)
+    password: str = Field(..., min_length=PASSWORD_MIN, max_length=PASSWORD_MAX)
     role: UserRole = UserRole.PATIENT
     # Which channel to verify with at signup: "email" or "phone".
     verification_method: str = "email"
+
+    @field_validator("password")
+    @classmethod
+    def _password_strength(cls, v):
+        return validate_password_strength(v)
 
 
 class UserResponse(UserBase):
@@ -39,8 +61,13 @@ class AdminCreateUserRequest(BaseModel):
     full_name: str = Field(..., min_length=2, max_length=100)
     email: EmailStr
     phone: Optional[str] = None
-    password: str = Field(..., min_length=8)
+    password: str = Field(..., min_length=PASSWORD_MIN, max_length=PASSWORD_MAX)
     role: UserRole = UserRole.PATIENT
+
+    @field_validator("password")
+    @classmethod
+    def _password_strength(cls, v):
+        return validate_password_strength(v)
 
 
 class TokenResponse(BaseModel):
@@ -94,7 +121,12 @@ class ForgotPasswordVerifyRequest(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     token: str
-    new_password: str = Field(..., min_length=8)
+    new_password: str = Field(..., min_length=PASSWORD_MIN, max_length=PASSWORD_MAX)
+
+    @field_validator("new_password")
+    @classmethod
+    def _password_strength(cls, v):
+        return validate_password_strength(v)
 
 
 # --- APPOINTMENT SCHEMAS ---

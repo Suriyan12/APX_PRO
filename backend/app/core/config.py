@@ -1,10 +1,20 @@
 import os
 from pydantic_settings import BaseSettings
+from pydantic import model_validator
 
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "APX PRO API"
     API_V1_STR: str = "/api/v1"
+
+    # Deployment environment: "development" | "production". In production the
+    # interactive API docs (/docs, /redoc, /openapi.json) are disabled and HSTS
+    # is emitted. Set ENVIRONMENT=production in the server .env.
+    ENVIRONMENT: str = "development"
+
+    @property
+    def is_production(self) -> bool:
+        return self.ENVIRONMENT.strip().lower() == "production"
 
     # JWT — SECRET_KEY MUST be set in .env; no hardcoded fallback
     SECRET_KEY: str
@@ -21,11 +31,10 @@ class Settings(BaseSettings):
     # CORS — comma-separated list of allowed origins
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:8080"
 
-    # AWS Storage (S3 + CloudFront)
-    AWS_ACCESS_KEY_ID: str = ""
-    AWS_SECRET_ACCESS_KEY: str = ""
-    AWS_REGION: str = "ap-south-1"
-    AWS_S3_BUCKET: str = "apx-pro-storage"
+    # CloudFront CDN — prefix prepended to legacy Exercise.video_url values in
+    # the /programs module. (The S3 upload/storage code was removed; storage is
+    # Google Drive now. This CDN prefix is retained only for existing program
+    # video URLs.)
     CLOUDFRONT_DOMAIN: str = ""
 
     # Razorpay
@@ -68,6 +77,23 @@ class Settings(BaseSettings):
 
     # Rehabilitation Module — uploaded exercise videos (stored in Google Drive)
     REHAB_VIDEO_MAX_FILE_SIZE_MB: int = 500
+
+    # Hard cap on request body size (backstop against memory/disk abuse from
+    # oversized uploads). Must exceed the largest legitimate upload (rehab video
+    # + multipart overhead). Per-endpoint limits are still enforced separately.
+    MAX_REQUEST_BODY_MB: int = 600
+
+    @model_validator(mode="after")
+    def _guard_dev_mode_in_production(self):
+        # DEVELOPMENT_MODE auto-grants paid Notes access with no payment. It must
+        # never be on in production, so fail fast at startup rather than silently
+        # giving every user free premium access.
+        if self.is_production and self.DEVELOPMENT_MODE:
+            raise ValueError(
+                "DEVELOPMENT_MODE=True is not allowed when ENVIRONMENT=production "
+                "(it bypasses payment for Notes). Set DEVELOPMENT_MODE=False."
+            )
+        return self
 
     class Config:
         case_sensitive = True

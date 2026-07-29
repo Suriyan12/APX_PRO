@@ -151,7 +151,12 @@ class UserDeletionService:
             PasswordResetToken.user_id == uid
         ).delete(synchronize_session=False)
         # Orphan table from the removed subscriptions module — no ORM model.
-        db.execute(text("DELETE FROM subscriptions WHERE user_id = :uid"), {"uid": str(uid)})
+        # Guard on existence: if the table was never created (e.g. this DB, or
+        # after the module was dropped) skip it rather than aborting the whole
+        # deletion transaction on a "no such table" error.
+        from sqlalchemy import inspect as sa_inspect
+        if "subscriptions" in sa_inspect(db.bind).get_table_names():
+            db.execute(text("DELETE FROM subscriptions WHERE user_id = :uid"), {"uid": str(uid)})
 
         # --- 4. The user row itself ---
         # Use a bulk delete so the ORM doesn't walk relationships and try to

@@ -15,20 +15,26 @@ class AuthInterceptor extends Interceptor {
   /// 401s wait rather than each firing their own /auth/refresh.
   static Future<bool>? _refreshInFlight;
 
-  // Web → localhost; Android emulator → 10.0.2.2; Physical device → your PC's
-  // LAN IP on the shared Wi-Fi.
+  // PRODUCTION: pass the full HTTPS base URL at build time — this is the only
+  // thing a release build should use, and it must be https:
+  //   flutter build apk --dart-define=API_BASE_URL=https://api.your-domain.com/api/v1
   //
-  // The host can be overridden WITHOUT editing code when the network changes:
+  // DEVELOPMENT (when API_BASE_URL is not supplied): fall back to the local
+  // dev backend over cleartext HTTP. Web → localhost; Android emulator →
+  // 10.0.2.2; physical device → your PC's LAN IP. Override the host with:
   //   flutter run --dart-define=API_HOST=192.168.1.139
-  // Remember: new IPs must also be whitelisted in
-  // android/app/src/main/res/xml/network_security_config.xml (cleartext HTTP).
+  // Dev cleartext is permitted only in debug builds (see the debug-only
+  // network_security_config.xml); release builds forbid cleartext entirely.
+  static const String _apiBaseUrl = String.fromEnvironment('API_BASE_URL');
   static const String _apiHost = String.fromEnvironment(
     'API_HOST',
-    defaultValue: '192.168.29.235', // ← dev PC Wi-Fi IP (ipconfig to confirm)
+    defaultValue: '192.168.1.139', // ← dev PC Wi-Fi IP (ipconfig to confirm)
   );
-  static final String baseUrl = kIsWeb
-      ? 'http://localhost:8000/api/v1'
-      : 'http://$_apiHost:8000/api/v1';
+  static final String baseUrl = _apiBaseUrl.isNotEmpty
+      ? _apiBaseUrl
+      : (kIsWeb
+          ? 'http://localhost:8000/api/v1'
+          : 'http://$_apiHost:8000/api/v1');
   AuthInterceptor(this._dio);
 
   @override

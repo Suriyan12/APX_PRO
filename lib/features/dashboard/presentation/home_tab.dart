@@ -20,7 +20,6 @@ class _HomeTabState extends ConsumerState<HomeTab> {
   int _todayCompleted = 0;
   int _todayTotal = 0;
   bool _loadingProgram = true;
-  String? _programError;
 
   @override
   void initState() {
@@ -36,7 +35,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
   }
 
   Future<void> _loadProgramData() async {
-    setState(() { _loadingProgram = true; _programError = null; });
+    setState(() { _loadingProgram = true; });
     try {
       final results = await Future.wait([
         _apiClient.get('/programs/workout-logs/today'),
@@ -65,7 +64,6 @@ class _HomeTabState extends ConsumerState<HomeTab> {
       if (mounted) {
         setState(() {
           _loadingProgram = false;
-          _programError = 'Could not load program data.';
         });
       }
     }
@@ -191,7 +189,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
               const SizedBox(height: 12),
               _GlassServiceCard(
                 title: 'Admin Panel',
-                subtitle: 'Manage users · Review scans · Notes',
+                subtitle: 'Manage users · Appointments · Notes',
                 icon: Icons.admin_panel_settings_rounded,
                 color: ext.secondary,
                 isFullWidth: true,

@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import get_password_hash
+from app.core.audit import audit_admin
 from app.api.deps import get_current_admin_user
 from app.models.models import User, UserRole
 from app.schemas.schemas import UserResponse, UserAdminListResponse, AdminCreateUserRequest
@@ -78,6 +79,8 @@ def create_user(
     db.add(user)
     db.commit()
     db.refresh(user)
+    audit_admin("user.create", actor=current_admin, target_id=user.id,
+                detail=f"role={user.role.value}")
     return user
 
 
@@ -102,6 +105,8 @@ def delete_user(
         raise HTTPException(status_code=400, detail="You cannot delete your own account.")
 
     drive_file_ids = UserDeletionService(db).delete_user_and_data(user, current_admin)
+    audit_admin("user.delete", actor=current_admin, target_id=id,
+                detail=f"drive_files={len(drive_file_ids)}")
     bg.add_task(cleanup_drive_files, drive_file_ids)
 
 
@@ -121,4 +126,6 @@ def toggle_user_status(
     user.is_active = not user.is_active
     db.commit()
     db.refresh(user)
+    audit_admin("user.status_toggle", actor=current_admin, target_id=user.id,
+                detail=f"is_active={user.is_active}")
     return user
