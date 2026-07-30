@@ -638,3 +638,57 @@ class RehabWorkoutHistoryResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+# --- NOTIFICATION SCHEMAS ---
+
+class DeviceTokenRegisterRequest(BaseModel):
+    token: str = Field(..., min_length=1, max_length=512)
+    platform: Optional[str] = Field(None, max_length=20)  # 'android' | 'ios' | 'web'
+
+
+class DeviceTokenUnregisterRequest(BaseModel):
+    token: str = Field(..., min_length=1, max_length=512)
+
+
+class DeviceTokenResponse(BaseModel):
+    id: UUID
+    platform: Optional[str] = None
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+    @field_serializer('created_at')
+    def _ser_created(self, dt: datetime, _info):
+        return _serialize_optional_utc(dt)
+
+
+class NotificationResponse(BaseModel):
+    id: UUID
+    title: str
+    body: str
+    type: Optional[str] = None
+    data: Optional[dict] = None
+    is_read: bool
+    read_at: Optional[datetime] = None
+    created_at: datetime
+
+    @field_serializer('read_at', 'created_at')
+    def _ser_times(self, dt: Optional[datetime], _info):
+        return _serialize_optional_utc(dt)
+
+
+class NotificationListResponse(BaseModel):
+    items: List[NotificationResponse]
+    total: int
+    limit: int
+    offset: int
+
+
+class UnreadCountResponse(BaseModel):
+    count: int
+
+
+class MarkAllReadResponse(BaseModel):
+    updated: int

@@ -24,6 +24,7 @@ from app.models.models import User, UserRole
 from app.core.config import settings
 from app.repositories.appointment_repository import AppointmentRepository
 from app.services.appointment_service import AppointmentService, IST, SLOT_DURATION_MINUTES
+from app.services import appointment_notifications as notify
 from app.schemas.schemas import (
     AppointmentApproveRequest,
     AppointmentCancelRequest,
@@ -116,6 +117,14 @@ def book_appointment(
 ):
     appt = _svc(db).book(appointment_in, current_user)
     bg.add_task(_send_booking_email, current_user.email, current_user.full_name, appt)
+    # Notify all admins of the new request (in-app now; push in the background).
+    date_str, time_str = _fmt_slot(appt.start_time, appt.end_time)
+    notify.notify_appointment_requested(
+        db, bg,
+        appointment_id=appt.id,
+        patient_name=current_user.full_name,
+        when_str=f"{date_str}, {time_str}",
+    )
     return appt
 
 
@@ -201,6 +210,15 @@ def approve_appointment(
         appointment_id=str(appt.id),
         is_reschedule=getattr(appt, "was_reschedule", False),
     )
+    # Notify the patient their appointment was approved.
+    date_str, time_str = _fmt_slot(appt.start_time, appt.end_time)
+    notify.notify_appointment_approved(
+        db, bg,
+        appointment_id=appt.id,
+        patient_id=appt.patient_id,
+        when_str=f"{date_str}, {time_str}",
+        is_online=(appt.consultation_type.value == "online"),
+    )
     return appt
 
 
@@ -225,6 +243,15 @@ def reject_appointment(
         appointment_id=str(appt.id),
         consultation_type=appt.consultation_type.value,
         is_reschedule=getattr(appt, "was_reschedule", False),
+    )
+    # Notify the patient their appointment request was declined.
+    date_str, time_str = _fmt_slot(appt.start_time, appt.end_time)
+    notify.notify_appointment_rejected(
+        db, bg,
+        appointment_id=appt.id,
+        patient_id=appt.patient_id,
+        when_str=f"{date_str}, {time_str}",
+        reason=appt.cancellation_reason,
     )
     return appt
 
