@@ -77,6 +77,20 @@ def get_my_appointments(
 
 
 # ---------------------------------------------------------------------------
+# Patient Appointment History (admin only)
+# ---------------------------------------------------------------------------
+
+@router.get("/patient/{patient_id}", response_model=List[AppointmentResponse])
+def get_patient_appointments(
+    patient_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Admin/therapist view of a single patient's appointments, newest first."""
+    return _svc(db).get_patient_appointments(patient_id, current_user)
+
+
+# ---------------------------------------------------------------------------
 # Validate Discount Code (preview, no side effects)
 # ---------------------------------------------------------------------------
 

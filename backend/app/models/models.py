@@ -401,6 +401,14 @@ class RehabDifficulty(str, enum.Enum):
     HARD = "hard"
 
 
+class RehabSessionStatus(str, enum.Enum):
+    """Lifecycle of a single workout session. A patient with no session for a
+    given day is simply "not started" — that is the absence of a row, not a
+    stored status, so only the two persisted states are enumerated here."""
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+
+
 class RehabProgram(Base):
     __tablename__ = "rehab_programs"
 
@@ -468,12 +476,21 @@ class RehabWorkoutSession(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     patient_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     program_id = Column(UUID(as_uuid=True), ForeignKey("rehab_programs.id", ondelete="CASCADE"), nullable=False)
+    # Calendar day the session belongs to (UTC). Enables per-day compliance and
+    # the "one session per day" model without re-deriving from started_at.
+    session_date = Column(Date, nullable=True, index=True)
     started_at = Column(DateTime(timezone=True), nullable=False, default=_utcnow)
     completed_at = Column(DateTime(timezone=True), nullable=True)
+    # Explicit lifecycle. is_completed is retained (existing queries depend on
+    # it) and is kept in lockstep with status in the repository — the single
+    # place both are written — so they never diverge.
+    status = Column(String(20), nullable=False, default=RehabSessionStatus.IN_PROGRESS.value)
     is_completed = Column(Boolean, nullable=False, default=False)
     exercises_total = Column(Integer, nullable=False)
     exercises_completed = Column(Integer, nullable=False, default=0)
     duration_seconds = Column(Integer, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
     program = relationship("RehabProgram", back_populates="sessions")
     exercise_completions = relationship(

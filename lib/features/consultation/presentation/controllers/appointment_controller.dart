@@ -15,6 +15,14 @@ final appointmentProvider =
   return AppointmentNotifier(ref.watch(appointmentRepositoryProvider));
 });
 
+/// Admin/therapist: a specific patient's appointment history, newest first.
+/// Keyed by patientId and autoDispose so each patient dashboard loads its own
+/// list independently of the global (self/all) [appointmentProvider].
+final patientAppointmentsProvider = FutureProvider.autoDispose
+    .family<List<AppointmentModel>, String>((ref, patientId) {
+  return ref.watch(appointmentRepositoryProvider).fetchForPatient(patientId);
+});
+
 // ── State ────────────────────────────────────────────────────────────────────
 
 class AppointmentState {

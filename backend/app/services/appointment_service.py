@@ -124,6 +124,15 @@ class AppointmentService:
             return self.repo.get_all()
         return self.repo.get_for_patient(current_user.id)
 
+    def get_patient_appointments(
+        self, patient_id: UUID, current_user: User
+    ) -> List[Appointment]:
+        """Admin-only: one patient's appointment history, newest first.
+        Powers the Appointment History section of the admin patient dashboard."""
+        if current_user.role != UserRole.ADMIN:
+            raise HTTPException(status_code=403, detail="Admin access required.")
+        return self.repo.get_for_patient(patient_id)
+
     # ------------------------------------------------------------------
     # Book
     # ------------------------------------------------------------------

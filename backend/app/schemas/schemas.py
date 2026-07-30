@@ -579,3 +579,62 @@ class RehabMyProgramResponse(BaseModel):
     program: RehabProgramResponse
     progress: RehabProgressResponse
     today_session: Optional[RehabSessionResponse] = None
+
+
+def _serialize_optional_utc(dt: Optional[datetime]) -> Optional[str]:
+    """Emit an explicit UTC offset so Dart never reads a naive DATETIME2 value
+    as device-local time. Mirrors AppointmentResponse._serialize_utc."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).isoformat()
+
+
+class RehabWorkoutDashboardResponse(BaseModel):
+    """Admin/therapist view of a patient's ACTIVE-program workout progress.
+    Every session metric is scoped to the active program only, so each program
+    keeps its own independent progress and compliance."""
+    has_active_program: bool
+    program_id: Optional[UUID] = None
+    program_title: Optional[str] = None
+    estimated_duration_days: Optional[int] = None
+    # completed / assigned, clamped to 0..100
+    overall_progress_percent: float = 0.0
+    # "not_started" (no session today) | "in_progress" | "completed"
+    today_status: str = "not_started"
+    last_completed_at: Optional[datetime] = None
+    # Assigned = estimated_duration_days (one prescribed session per day).
+    assigned_sessions: int = 0
+    completed_sessions: int = 0
+    remaining_sessions: int = 0
+    # completed / sessions-expected-to-date, clamped to 0..100
+    compliance_percent: float = 0.0
+
+    @field_serializer('last_completed_at')
+    def _ser_last_completed(self, dt: Optional[datetime], _info):
+        return _serialize_optional_utc(dt)
+
+
+class RehabWorkoutHistoryItem(BaseModel):
+    id: UUID
+    program_id: UUID
+    program_title: str
+    session_date: Optional[date] = None
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+    status: str
+    duration_seconds: Optional[int] = None
+    exercises_total: int
+    exercises_completed: int
+
+    @field_serializer('started_at', 'completed_at')
+    def _ser_times(self, dt: Optional[datetime], _info):
+        return _serialize_optional_utc(dt)
+
+
+class RehabWorkoutHistoryResponse(BaseModel):
+    items: List[RehabWorkoutHistoryItem]
+    total: int
+    limit: int
+    offset: int

@@ -14,6 +14,15 @@ class AppointmentRepository {
         .toList();
   }
 
+  /// Admin/therapist: a single patient's appointment history, newest first.
+  Future<List<AppointmentModel>> fetchForPatient(String patientId) async {
+    final resp = await _client.get('/appointments/patient/$patientId');
+    final list = resp.data as List;
+    return list
+        .map((e) => AppointmentModel.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
   Future<AppointmentModel> book({
     required String startTime,
     required String endTime,

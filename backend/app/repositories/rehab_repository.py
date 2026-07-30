@@ -1,11 +1,12 @@
 import logging
 import uuid
 from datetime import datetime, timezone, timedelta
-from typing import List, Optional
-from sqlalchemy.orm import Session
+from typing import List, Optional, Tuple
+from sqlalchemy.orm import Session, joinedload
 
 from app.models.models import (
-    RehabProgram, RehabExercise, RehabWorkoutSession, RehabExerciseCompletion
+    RehabProgram, RehabExercise, RehabWorkoutSession, RehabExerciseCompletion,
+    RehabSessionStatus,
 )
 
 logger = logging.getLogger(__name__)
@@ -195,10 +196,14 @@ class RehabRepository:
         program_id: uuid.UUID,
         exercises_total: int,
     ) -> RehabWorkoutSession:
+        now = datetime.now(timezone.utc)
         session = RehabWorkoutSession(
             patient_id=patient_id,
             program_id=program_id,
             exercises_total=exercises_total,
+            session_date=now.date(),
+            status=RehabSessionStatus.IN_PROGRESS.value,
+            is_completed=False,
         )
         self.db.add(session)
         self.db.commit()
@@ -212,6 +217,9 @@ class RehabRepository:
         exercises_completed: int,
         completions: list,
     ) -> RehabWorkoutSession:
+        # status and is_completed are written together, here and nowhere else,
+        # so the explicit lifecycle and the legacy boolean never diverge.
+        session.status = RehabSessionStatus.COMPLETED.value
         session.is_completed = True
         session.completed_at = datetime.now(timezone.utc)
         session.duration_seconds = duration_seconds
@@ -246,3 +254,71 @@ class RehabRepository:
             .order_by(RehabWorkoutSession.completed_at.desc())
             .all()
         )
+
+    def count_completed_sessions(self, patient_id: uuid.UUID, program_id: uuid.UUID) -> int:
+        """Completed session count scoped to ONE program — the basis for that
+        program's independent compliance and progress."""
+        return (
+            self.db.query(RehabWorkoutSession)
+            .filter(
+                RehabWorkoutSession.patient_id == patient_id,
+                RehabWorkoutSession.program_id == program_id,
+                RehabWorkoutSession.is_completed == True,
+            )
+            .count()
+        )
+
+    def get_last_completed_session(
+        self, patient_id: uuid.UUID, program_id: uuid.UUID
+    ) -> Optional[RehabWorkoutSession]:
+        return (
+            self.db.query(RehabWorkoutSession)
+            .filter(
+                RehabWorkoutSession.patient_id == patient_id,
+                RehabWorkoutSession.program_id == program_id,
+                RehabWorkoutSession.is_completed == True,
+            )
+            .order_by(RehabWorkoutSession.completed_at.desc())
+            .first()
+        )
+
+    def get_today_session_for_program(
+        self, patient_id: uuid.UUID, program_id: uuid.UUID
+    ) -> Optional[RehabWorkoutSession]:
+        today = datetime.now(timezone.utc).date()
+        return (
+            self.db.query(RehabWorkoutSession)
+            .filter(
+                RehabWorkoutSession.patient_id == patient_id,
+                RehabWorkoutSession.program_id == program_id,
+                RehabWorkoutSession.session_date == today,
+            )
+            .order_by(RehabWorkoutSession.started_at.desc())
+            .first()
+        )
+
+    def list_sessions_for_patient(
+        self,
+        patient_id: uuid.UUID,
+        limit: int,
+        offset: int,
+        program_id: Optional[uuid.UUID] = None,
+    ) -> Tuple[List[RehabWorkoutSession], int]:
+        """One page of a patient's workout history, newest first, with the total
+        count for pagination. The program is eager-loaded so the history rows can
+        show each session's program title without an N+1."""
+        q = (
+            self.db.query(RehabWorkoutSession)
+            .options(joinedload(RehabWorkoutSession.program))
+            .filter(RehabWorkoutSession.patient_id == patient_id)
+        )
+        if program_id is not None:
+            q = q.filter(RehabWorkoutSession.program_id == program_id)
+        total = q.count()
+        rows = (
+            q.order_by(RehabWorkoutSession.started_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        return rows, total
