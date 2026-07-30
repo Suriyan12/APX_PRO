@@ -18,6 +18,10 @@ limits==5.8.0
 # 2.38.x. Verify/adjust against the deployment environment when provisioning.
 google-api-python-client==2.120.0
 google-auth==2.38.0
+# Firebase Cloud Messaging (push notifications). Imported lazily — if it is not
+# installed or no service-account file is configured, push is disabled and the
+# app runs normally (notifications remain in-app).
+firebase-admin==6.5.0
 requests==2.32.3
 cryptography==49.0.0
 email-validator==2.3.0

@@ -31,6 +31,8 @@ import 'package:apx_pro/features/rehab/presentation/screens/admin_exercise_form.
 import 'package:apx_pro/features/rehab/presentation/screens/admin_workout_history_screen.dart';
 import 'package:apx_pro/features/consultation/data/appointment_model.dart';
 import 'package:apx_pro/features/consultation/presentation/screens/appointment_detail_screen.dart';
+import 'package:apx_pro/features/consultation/presentation/screens/appointment_detail_loader_screen.dart';
+import 'package:apx_pro/features/notifications/presentation/screens/notification_center_screen.dart';
 import 'package:apx_pro/features/settings/presentation/settings_screen.dart';
 import 'package:apx_pro/features/settings/presentation/about_us_screen.dart';
 
@@ -110,6 +112,16 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/forgot-password', builder: (_, __) => const ForgotPasswordScreen()),
       GoRoute(path: '/dashboard', builder: (_, __) => const DashboardScreen()),
       GoRoute(path: '/settings',  builder: (_, __) => const SettingsScreen()),
+
+      // Notification Center + appointment deep-link target (patient & admin).
+      GoRoute(path: '/notifications', builder: (_, __) => const NotificationCenterScreen()),
+      GoRoute(
+        path: '/appointments/:appointmentId',
+        builder: (_, state) => AppointmentDetailLoaderScreen(
+          appointmentId: state.pathParameters['appointmentId']!,
+          preloaded: state.extra as AppointmentModel?,
+        ),
+      ),
       GoRoute(path: '/settings/about', builder: (_, __) => const AboutUsScreen()),
       GoRoute(path: '/assessment', builder: (_, __) => const AssessmentScreen()),
       GoRoute(path: '/progress', builder: (_, __) => const ProgressScreen()),

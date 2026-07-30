@@ -12,7 +12,8 @@ from sqlalchemy import (
     Text,
     Integer,
     Numeric,
-    Date
+    Date,
+    Index,
 )
 from sqlalchemy import Uuid as UUID
 from sqlalchemy.orm import relationship
@@ -513,3 +514,60 @@ class RehabExerciseCompletion(Base):
 
     session = relationship("RehabWorkoutSession", back_populates="exercise_completions")
     exercise = relationship("RehabExercise", back_populates="completions")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NOTIFICATIONS
+# ─────────────────────────────────────────────────────────────────────────────
+
+class DeviceToken(Base):
+    """A push-notification token for one physical device, owned by a user.
+
+    A device token is globally unique (one row per device), so re-registering a
+    token that already exists reassigns it to the current user and reactivates
+    it — that is how a shared/handed-down device is handled. Push delivery is
+    added in a later phase; until then these rows are simply persisted.
+    """
+    __tablename__ = "device_tokens"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    token = Column(String(512), nullable=False, unique=True)
+    platform = Column(String(20), nullable=True)  # 'android' | 'ios' | 'web'
+    is_active = Column(Boolean, nullable=False, default=True)
+    last_seen_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+
+    user = relationship("User")
+
+
+class Notification(Base):
+    """An in-app notification for a user. Persisted regardless of whether push
+    delivery is configured, so the Notification Center works on its own."""
+    __tablename__ = "notifications"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String(200), nullable=False)
+    body = Column(Text, nullable=False)
+    # Category used for grouping / client-side routing, e.g. 'appointment',
+    # 'rehab', 'system'. Free-form string (not an enum) so new producers can be
+    # added without a migration.
+    type = Column(String(50), nullable=True)
+    # Optional JSON-encoded payload for deep-linking (e.g. an appointment id).
+    # Stored as text; the service encodes/decodes it.
+    data = Column(Text, nullable=True)
+    is_read = Column(Boolean, nullable=False, default=False)
+    read_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+
+    user = relationship("User")
+
+    __table_args__ = (
+        # The unread-count query filters (user_id, is_read); the list query
+        # orders a user's rows by recency.
+        Index("ix_notifications_user_read", "user_id", "is_read"),
+        Index("ix_notifications_user_created", "user_id", "created_at"),
+    )

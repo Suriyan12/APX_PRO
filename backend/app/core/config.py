@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 from pydantic_settings import BaseSettings
 from pydantic import model_validator
 
@@ -82,6 +83,21 @@ class Settings(BaseSettings):
     # oversized uploads). Must exceed the largest legitimate upload (rehab video
     # + multipart overhead). Per-endpoint limits are still enforced separately.
     MAX_REQUEST_BODY_MB: int = 600
+
+    # Push notifications (Firebase Cloud Messaging). Disabled by default: while
+    # off, notifications are still persisted and served in-app — only push
+    # delivery is skipped.
+    FCM_ENABLED: bool = False
+    # Absolute path to the Firebase service-account JSON. Never commit this file
+    # or hardcode its contents; supply the path via the environment. If unset,
+    # missing, or invalid, push is disabled and the app runs normally.
+    FIREBASE_CREDENTIALS_PATH: Optional[str] = None
+
+    @property
+    def push_notifications_enabled(self) -> bool:
+        """Master switch for attempting push. Actual availability also depends on
+        the Firebase SDK initializing successfully (see FirebasePushService)."""
+        return self.FCM_ENABLED
 
     @model_validator(mode="after")
     def _guard_dev_mode_in_production(self):

@@ -7,6 +7,7 @@ import 'package:apx_pro/core/network/api_client.dart';
 import 'package:apx_pro/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:apx_pro/features/consultation/data/appointment_model.dart';
 import 'package:apx_pro/features/consultation/presentation/controllers/appointment_controller.dart';
+import 'package:apx_pro/features/notifications/presentation/widgets/notification_bell.dart';
 
 class HomeTab extends ConsumerStatefulWidget {
   const HomeTab({super.key});
@@ -137,14 +138,20 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                     ),
                   ],
                 ),
-                GestureDetector(
-                  onTap: () => context.push('/settings'),
-                  child: GlassCard(
-                    padding: const EdgeInsets.all(10),
-                    borderRadius: BorderRadius.circular(50),
-                    child: Icon(Icons.settings_rounded,
-                        color: ext.primary, size: 22),
-                  ),
+                Row(
+                  children: [
+                    const NotificationBell(),
+                    const SizedBox(width: 10),
+                    GestureDetector(
+                      onTap: () => context.push('/settings'),
+                      child: GlassCard(
+                        padding: const EdgeInsets.all(10),
+                        borderRadius: BorderRadius.circular(50),
+                        child: Icon(Icons.settings_rounded,
+                            color: ext.primary, size: 22),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

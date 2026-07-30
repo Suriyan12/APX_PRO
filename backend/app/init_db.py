@@ -17,6 +17,8 @@ from app.models.models import (
     Exercise,
     WorkoutLog,
     ProgressLog,
+    DeviceToken,
+    Notification,
 )
 
 def create_tables():

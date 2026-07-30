@@ -280,8 +280,23 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
+  /// Set by the notification layer so logout can deactivate this device's push
+  /// token BEFORE the auth token is wiped (the unregister call needs it). Best-
+  /// effort — a failure here never blocks logout. Mirrors
+  /// [AuthInterceptor.onSessionExpired].
+  static Future<void> Function()? onLogout;
+
   Future<void> logout() async {
     state = state.copyWith(status: AuthStatus.loading, errorMessage: null);
+    // Unregister the device token while the access token is still present.
+    final hook = onLogout;
+    if (hook != null) {
+      try {
+        await hook();
+      } catch (_) {
+        // Never let a push-cleanup failure prevent logout.
+      }
+    }
     await _storage.deleteAll();
     state = AuthState(status: AuthStatus.unauthenticated);
   }

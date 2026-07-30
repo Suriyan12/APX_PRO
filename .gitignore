@@ -7,6 +7,9 @@ backend/gdrive-service-account.json
 android/app/google-services.json
 backend/oauth_client.json
 
+# Firebase Cloud Messaging service account (push notifications) — NEVER commit
+backend/firebase-service-account*.json
+
 # Python
 venv/
 __pycache__/
