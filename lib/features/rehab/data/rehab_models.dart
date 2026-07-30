@@ -311,6 +311,152 @@ class RehabMyProgramData {
   });
 }
 
+/// Admin/therapist view of a patient's ACTIVE-program workout progress.
+/// Every metric is scoped to the active program only, so each program keeps
+/// its own independent progress. Mirrors the backend `/rehab/patients/{id}/progress`.
+enum WorkoutTodayStatus { notStarted, inProgress, completed }
+
+@immutable
+class WorkoutDashboardModel {
+  final bool hasActiveProgram;
+  final String? programId;
+  final String? programTitle;
+  final int? estimatedDurationDays;
+  final double overallProgressPercent; // 0..100
+  final WorkoutTodayStatus todayStatus;
+  final DateTime? lastCompletedAt;
+  final int assignedSessions;
+  final int completedSessions;
+  final int remainingSessions;
+  final double compliancePercent; // 0..100
+
+  const WorkoutDashboardModel({
+    required this.hasActiveProgram,
+    this.programId,
+    this.programTitle,
+    this.estimatedDurationDays,
+    required this.overallProgressPercent,
+    required this.todayStatus,
+    this.lastCompletedAt,
+    required this.assignedSessions,
+    required this.completedSessions,
+    required this.remainingSessions,
+    required this.compliancePercent,
+  });
+
+  factory WorkoutDashboardModel.fromJson(Map<String, dynamic> j) {
+    return WorkoutDashboardModel(
+      hasActiveProgram: j['has_active_program'] as bool? ?? false,
+      programId: j['program_id'] as String?,
+      programTitle: j['program_title'] as String?,
+      estimatedDurationDays: (j['estimated_duration_days'] as num?)?.toInt(),
+      overallProgressPercent:
+          (j['overall_progress_percent'] as num?)?.toDouble() ?? 0.0,
+      todayStatus: _parseTodayStatus(j['today_status'] as String?),
+      lastCompletedAt: j['last_completed_at'] != null
+          ? DateTime.parse(j['last_completed_at'] as String).toLocal()
+          : null,
+      assignedSessions: (j['assigned_sessions'] as num?)?.toInt() ?? 0,
+      completedSessions: (j['completed_sessions'] as num?)?.toInt() ?? 0,
+      remainingSessions: (j['remaining_sessions'] as num?)?.toInt() ?? 0,
+      compliancePercent: (j['compliance_percent'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+
+  static WorkoutTodayStatus _parseTodayStatus(String? v) {
+    switch (v) {
+      case 'completed':
+        return WorkoutTodayStatus.completed;
+      case 'in_progress':
+        return WorkoutTodayStatus.inProgress;
+      default:
+        return WorkoutTodayStatus.notStarted;
+    }
+  }
+
+  /// 0.0..1.0 for LinearProgressIndicator.
+  double get overallFraction => (overallProgressPercent / 100).clamp(0.0, 1.0);
+}
+
+/// One row of a patient's workout history.
+/// Mirrors the backend `/rehab/patients/{id}/sessions` items.
+@immutable
+class WorkoutHistoryItemModel {
+  final String id;
+  final String programId;
+  final String programTitle;
+  final DateTime? sessionDate;
+  final DateTime startedAt;
+  final DateTime? completedAt;
+  final WorkoutTodayStatus status;
+  final int? durationSeconds;
+  final int exercisesTotal;
+  final int exercisesCompleted;
+
+  const WorkoutHistoryItemModel({
+    required this.id,
+    required this.programId,
+    required this.programTitle,
+    this.sessionDate,
+    required this.startedAt,
+    this.completedAt,
+    required this.status,
+    this.durationSeconds,
+    required this.exercisesTotal,
+    required this.exercisesCompleted,
+  });
+
+  factory WorkoutHistoryItemModel.fromJson(Map<String, dynamic> j) {
+    return WorkoutHistoryItemModel(
+      id: j['id'] as String,
+      programId: j['program_id'] as String,
+      programTitle: j['program_title'] as String? ?? '—',
+      sessionDate: j['session_date'] != null
+          ? DateTime.parse(j['session_date'] as String)
+          : null,
+      startedAt: DateTime.parse(j['started_at'] as String).toLocal(),
+      completedAt: j['completed_at'] != null
+          ? DateTime.parse(j['completed_at'] as String).toLocal()
+          : null,
+      status: WorkoutDashboardModel._parseTodayStatus(j['status'] as String?),
+      durationSeconds:
+          j['duration_seconds'] != null ? (j['duration_seconds'] as num).toInt() : null,
+      exercisesTotal: (j['exercises_total'] as num?)?.toInt() ?? 0,
+      exercisesCompleted: (j['exercises_completed'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  bool get isCompleted => status == WorkoutTodayStatus.completed;
+}
+
+/// One page of workout history plus the total (for lazy pagination).
+@immutable
+class WorkoutHistoryPage {
+  final List<WorkoutHistoryItemModel> items;
+  final int total;
+  final int limit;
+  final int offset;
+
+  const WorkoutHistoryPage({
+    required this.items,
+    required this.total,
+    required this.limit,
+    required this.offset,
+  });
+
+  factory WorkoutHistoryPage.fromJson(Map<String, dynamic> j) {
+    final raw = j['items'] as List<dynamic>? ?? [];
+    return WorkoutHistoryPage(
+      items: raw
+          .map((e) => WorkoutHistoryItemModel.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      total: (j['total'] as num?)?.toInt() ?? 0,
+      limit: (j['limit'] as num?)?.toInt() ?? raw.length,
+      offset: (j['offset'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
 @immutable
 class ExerciseResult {
   final String exerciseId;

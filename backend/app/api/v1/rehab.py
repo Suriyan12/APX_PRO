@@ -8,6 +8,7 @@ from fastapi import (
     Depends,
     File,
     HTTPException,
+    Query,
     Request,
     UploadFile,
     status,
@@ -35,6 +36,8 @@ from app.schemas.schemas import (
     RehabSessionCompleteRequest,
     RehabSessionResponse,
     RehabSessionStartRequest,
+    RehabWorkoutDashboardResponse,
+    RehabWorkoutHistoryResponse,
 )
 from app.services import rehab_service as svc
 
@@ -120,6 +123,31 @@ def toggle_program(
     admin: User = Depends(get_current_admin_user),
 ):
     return svc.toggle_program(db, admin, program_id)
+
+
+# ── Admin: Patient workout dashboard ──────────────────────────────────────────
+
+@router.get("/patients/{patient_id}/progress", response_model=RehabWorkoutDashboardResponse)
+def patient_workout_progress(
+    patient_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin_user),
+):
+    """Active-program workout progress for a patient (admin/therapist view).
+    Read-only: admins can see progress but never mark a workout complete."""
+    return svc.get_patient_dashboard(db, admin, patient_id)
+
+
+@router.get("/patients/{patient_id}/sessions", response_model=RehabWorkoutHistoryResponse)
+def patient_workout_history(
+    patient_id: uuid.UUID,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin_user),
+):
+    """Paginated workout history for a patient, newest first (admin view)."""
+    return svc.get_patient_sessions(db, admin, patient_id, limit, offset)
 
 
 # ── Admin: Exercises ──────────────────────────────────────────────────────────

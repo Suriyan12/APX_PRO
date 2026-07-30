@@ -584,3 +584,105 @@ final programDetailProvider = StateNotifierProvider.family<
     ProgramDetailNotifier, ProgramDetailState, String>((ref, programId) {
   return ProgramDetailNotifier(ref.watch(rehabRepositoryProvider), programId);
 });
+
+// ── Admin: Patient Workout Dashboard ──────────────────────────────────────────
+//
+// A simple read-through future keyed by patientId. autoDispose so it is
+// re-fetched each time the patient detail screen opens (surfacing the latest
+// completion the moment an admin views the profile); refresh with
+// `ref.invalidate(patientWorkoutDashboardProvider(patientId))`.
+
+final patientWorkoutDashboardProvider = FutureProvider.autoDispose
+    .family<WorkoutDashboardModel, String>((ref, patientId) {
+  return ref.watch(rehabRepositoryProvider).fetchPatientDashboard(patientId);
+});
+
+// ── Admin: Patient Workout History (lazy, paginated) ──────────────────────────
+
+class WorkoutHistoryState {
+  final bool loading;        // first-page load
+  final bool loadingMore;    // subsequent pages
+  final String? error;
+  final List<WorkoutHistoryItemModel> items;
+  final int total;
+
+  const WorkoutHistoryState({
+    this.loading = false,
+    this.loadingMore = false,
+    this.error,
+    this.items = const [],
+    this.total = 0,
+  });
+
+  bool get hasMore => items.length < total;
+
+  WorkoutHistoryState copyWith({
+    bool? loading,
+    bool? loadingMore,
+    String? error,
+    List<WorkoutHistoryItemModel>? items,
+    int? total,
+    bool clearError = false,
+  }) {
+    return WorkoutHistoryState(
+      loading: loading ?? this.loading,
+      loadingMore: loadingMore ?? this.loadingMore,
+      error: clearError ? null : (error ?? this.error),
+      items: items ?? this.items,
+      total: total ?? this.total,
+    );
+  }
+}
+
+class WorkoutHistoryNotifier extends StateNotifier<WorkoutHistoryState> {
+  WorkoutHistoryNotifier(this._repo, this._patientId)
+      : super(const WorkoutHistoryState());
+  final RehabRepository _repo;
+  final String _patientId;
+
+  static const _pageSize = 20;
+
+  Future<void> loadInitial() async {
+    if (state.loading) return;
+    state = state.copyWith(loading: true, clearError: true);
+    try {
+      final page = await _repo.fetchPatientSessions(
+        _patientId, limit: _pageSize, offset: 0,
+      );
+      state = state.copyWith(
+        loading: false, items: page.items, total: page.total,
+      );
+    } catch (e) {
+      state = state.copyWith(loading: false, error: _msg(e));
+    }
+  }
+
+  Future<void> loadMore() async {
+    if (state.loadingMore || state.loading || !state.hasMore) return;
+    state = state.copyWith(loadingMore: true, clearError: true);
+    try {
+      final page = await _repo.fetchPatientSessions(
+        _patientId, limit: _pageSize, offset: state.items.length,
+      );
+      state = state.copyWith(
+        loadingMore: false,
+        items: [...state.items, ...page.items],
+        total: page.total,
+      );
+    } catch (e) {
+      state = state.copyWith(loadingMore: false, error: _msg(e));
+    }
+  }
+
+  Future<void> refresh() async {
+    state = const WorkoutHistoryState();
+    await loadInitial();
+  }
+
+  String _msg(Object e) => e is ApiException ? e.message : e.toString();
+}
+
+final patientWorkoutHistoryProvider = StateNotifierProvider.autoDispose.family<
+    WorkoutHistoryNotifier, WorkoutHistoryState, String>((ref, patientId) {
+  return WorkoutHistoryNotifier(ref.watch(rehabRepositoryProvider), patientId);
+});

@@ -190,6 +190,100 @@ def toggle_program(db: Session, admin: User, program_id: uuid.UUID) -> RehabProg
     return repo.set_active(program, False)
 
 
+# ── Admin: Patient workout dashboard ──────────────────────────────────────────
+
+def _empty_dashboard() -> dict:
+    return {
+        "has_active_program": False,
+        "program_id": None,
+        "program_title": None,
+        "estimated_duration_days": None,
+        "overall_progress_percent": 0.0,
+        "today_status": "not_started",
+        "last_completed_at": None,
+        "assigned_sessions": 0,
+        "completed_sessions": 0,
+        "remaining_sessions": 0,
+        "compliance_percent": 0.0,
+    }
+
+
+def get_patient_dashboard(db: Session, admin: User, patient_id: uuid.UUID) -> dict:
+    """Workout-progress summary for a patient's ACTIVE program only.
+
+    Model: a program prescribes one session per day across its
+    ``estimated_duration_days`` (= assigned sessions). Overall progress is
+    completed/assigned; compliance is completed vs the sessions expected by
+    today (min of days-elapsed and assigned), so a patient early in a long
+    program isn't penalised for sessions not yet due. All counts are scoped to
+    the active program, keeping each program's progress independent.
+    """
+    _require_admin(admin)
+    repo = _repo(db)
+    program = repo.get_active_for_patient(patient_id)
+    if not program:
+        return _empty_dashboard()
+
+    assigned = program.estimated_duration_days or 0
+    completed = repo.count_completed_sessions(patient_id, program.id)
+    remaining = max(0, assigned - completed)
+    overall = round(min(completed / assigned * 100, 100.0), 1) if assigned > 0 else 0.0
+
+    today = datetime.now(timezone.utc).date()
+    start = program.created_at.date() if program.created_at else today
+    days_elapsed = (today - start).days + 1  # inclusive of the start day
+    expected_to_date = max(1, min(days_elapsed, assigned)) if assigned > 0 else 1
+    compliance = round(min(completed / expected_to_date * 100, 100.0), 1)
+
+    today_session = repo.get_today_session_for_program(patient_id, program.id)
+    if today_session is None:
+        today_status = "not_started"
+    elif today_session.is_completed:
+        today_status = "completed"
+    else:
+        today_status = "in_progress"
+
+    last = repo.get_last_completed_session(patient_id, program.id)
+
+    return {
+        "has_active_program": True,
+        "program_id": program.id,
+        "program_title": program.title,
+        "estimated_duration_days": assigned,
+        "overall_progress_percent": overall,
+        "today_status": today_status,
+        "last_completed_at": last.completed_at if last else None,
+        "assigned_sessions": assigned,
+        "completed_sessions": completed,
+        "remaining_sessions": remaining,
+        "compliance_percent": compliance,
+    }
+
+
+def get_patient_sessions(db: Session, admin: User, patient_id: uuid.UUID,
+                         limit: int, offset: int) -> dict:
+    """Paginated workout history for a patient, newest first (admin view)."""
+    _require_admin(admin)
+    rows, total = _repo(db).list_sessions_for_patient(patient_id, limit, offset)
+    items = [
+        {
+            "id": s.id,
+            "program_id": s.program_id,
+            "program_title": s.program.title if s.program else "—",
+            "session_date": s.session_date,
+            "started_at": s.started_at,
+            "completed_at": s.completed_at,
+            # Coalesce for any legacy row written before the status column existed.
+            "status": s.status or ("completed" if s.is_completed else "in_progress"),
+            "duration_seconds": s.duration_seconds,
+            "exercises_total": s.exercises_total,
+            "exercises_completed": s.exercises_completed,
+        }
+        for s in rows
+    ]
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+
 # ── Admin: Exercises ──────────────────────────────────────────────────────────
 
 def add_exercise(db: Session, admin: User, program_id: uuid.UUID, **kwargs):

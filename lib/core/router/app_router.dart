@@ -28,6 +28,9 @@ import 'package:apx_pro/features/rehab/presentation/screens/exercise_detail_scre
 import 'package:apx_pro/features/rehab/presentation/screens/admin_patient_programs.dart';
 import 'package:apx_pro/features/rehab/presentation/screens/admin_program_detail.dart';
 import 'package:apx_pro/features/rehab/presentation/screens/admin_exercise_form.dart';
+import 'package:apx_pro/features/rehab/presentation/screens/admin_workout_history_screen.dart';
+import 'package:apx_pro/features/consultation/data/appointment_model.dart';
+import 'package:apx_pro/features/consultation/presentation/screens/appointment_detail_screen.dart';
 import 'package:apx_pro/features/settings/presentation/settings_screen.dart';
 import 'package:apx_pro/features/settings/presentation/about_us_screen.dart';
 
@@ -190,9 +193,24 @@ final routerProvider = Provider<GoRouter>((ref) {
         ),
       ),
 
+      // Patient workout history (lazy, paginated)
+      GoRoute(
+        path: '/admin/rehab/patients/:patientId/history',
+        builder: (_, state) => AdminWorkoutHistoryScreen(
+          patientId: state.pathParameters['patientId']!,
+          patientName: state.extra as String?,
+        ),
+      ),
+
       // Admin panel routes
       GoRoute(path: '/admin/panel', builder: (_, __) => const AdminPanelScreen()),
       GoRoute(path: '/admin/appointments', builder: (_, __) => const AdminAppointmentsScreen()),
+      GoRoute(
+        path: '/admin/appointments/:appointmentId',
+        builder: (_, state) => AppointmentDetailScreen(
+          appointment: state.extra as AppointmentModel?,
+        ),
+      ),
       GoRoute(
         path: '/admin/users/:userId',
         builder: (_, state) =>

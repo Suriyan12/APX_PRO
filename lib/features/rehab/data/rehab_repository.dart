@@ -117,6 +117,25 @@ class RehabRepository {
     return RehabProgramModel.fromJson(r.data as Map<String, dynamic>);
   }
 
+  // ── Admin: Patient workout dashboard ──────────────────────────────────────
+
+  Future<WorkoutDashboardModel> fetchPatientDashboard(String patientId) async {
+    final r = await _api.get('/rehab/patients/$patientId/progress');
+    return WorkoutDashboardModel.fromJson(r.data as Map<String, dynamic>);
+  }
+
+  Future<WorkoutHistoryPage> fetchPatientSessions(
+    String patientId, {
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final r = await _api.get(
+      '/rehab/patients/$patientId/sessions',
+      queryParameters: {'limit': limit, 'offset': offset},
+    );
+    return WorkoutHistoryPage.fromJson(r.data as Map<String, dynamic>);
+  }
+
   // ── Admin: Exercises ──────────────────────────────────────────────────────
 
   Future<RehabExerciseModel> addExercise(
