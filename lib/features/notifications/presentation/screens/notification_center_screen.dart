@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import 'package:apx_pro/core/theme/colors.dart';
 import 'package:apx_pro/core/theme/glass.dart';
+import 'package:apx_pro/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:apx_pro/features/notifications/data/notification_model.dart';
 import 'package:apx_pro/features/notifications/presentation/controllers/notification_controller.dart';
 
@@ -46,10 +47,14 @@ class _NotificationCenterScreenState
 
   Future<void> _onTapNotification(NotificationModel n) async {
     ref.read(notificationsProvider.notifier).markRead(n.id);
-    // Deep-link: appointment notifications open the appointment details.
+    // Deep-link: admins open Appointment Management; patients open details.
     final appointmentId = n.appointmentId;
     if (n.type == 'appointment' && appointmentId != null) {
-      context.push('/appointments/$appointmentId');
+      final isAdmin = ref.read(authControllerProvider).isAdmin;
+      context.push(appointmentNotificationRoute(
+        isAdmin: isAdmin,
+        appointmentId: appointmentId,
+      ));
     }
   }
 

@@ -16,6 +16,17 @@ final pushServiceProvider = Provider<PushService>((ref) {
   return PushService(ref.watch(notificationRepositoryProvider));
 });
 
+/// The route an appointment notification should open, by role. Admins go to the
+/// Appointment Management screen (pending queue with approve/reject); patients
+/// go to their read-only Appointment Details. Shared by the push-tap handler
+/// and the in-app Notification Center so both behave identically.
+String appointmentNotificationRoute({
+  required bool isAdmin,
+  required String appointmentId,
+}) {
+  return isAdmin ? '/admin/appointments' : '/appointments/$appointmentId';
+}
+
 // ── State ──────────────────────────────────────────────────────────────────
 
 class NotificationsState {
@@ -138,6 +149,24 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
       await _repo.markAllRead();
     } catch (_) {
       state = state.copyWith(items: previous, unread: previousUnread);
+    }
+  }
+
+  /// Mark a notification read by id, even when the list isn't loaded (e.g. after
+  /// a deep-link from a cold start). Updates the local copy if present and
+  /// refreshes the badge. Best-effort — never throws.
+  Future<void> markReadById(String id) async {
+    try {
+      await _repo.markRead(id);
+      final idx = state.items.indexWhere((n) => n.id == id);
+      if (idx != -1 && !state.items[idx].isRead) {
+        final updated = [...state.items];
+        updated[idx] = updated[idx].copyWith(isRead: true, readAt: DateTime.now());
+        state = state.copyWith(items: updated);
+      }
+      await refreshUnread();
+    } catch (_) {
+      // Marking read is non-critical; ignore transient failures.
     }
   }
 

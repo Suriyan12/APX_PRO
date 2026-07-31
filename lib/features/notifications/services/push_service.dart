@@ -27,8 +27,12 @@ class PushService {
 
   /// Invoked when a message is tapped (from background or terminated) or is
   /// received in the foreground and the user chooses to view it. Receives the
-  /// message's `data` payload for deep-link routing.
-  void Function(Map<String, dynamic> data)? onTapPayload;
+  /// message's `data` payload for deep-link routing. `fromColdStart` is true
+  /// only for the message that launched a terminated app (getInitialMessage),
+  /// so the handler can build a full navigation stack instead of pushing onto
+  /// the transient splash route.
+  void Function(Map<String, dynamic> data, {required bool fromColdStart})?
+      onTapPayload;
 
   /// Invoked for every foreground message so the UI can refresh the badge and
   /// surface an in-app banner.
@@ -45,15 +49,17 @@ class PushService {
         alert: true, badge: true, sound: true,
       );
 
-      // Terminated-state tap: the message that launched the app.
+      // Terminated-state tap: the message that launched the app. Marked as a
+      // cold start so the handler can defer until auth resolves and rebuild the
+      // navigation stack (Dashboard → detail).
       final initial = await _fm.getInitialMessage();
       if (initial != null) {
-        onTapPayload?.call(initial.data);
+        onTapPayload?.call(initial.data, fromColdStart: true);
       }
 
-      // Background → foreground tap.
+      // Background → foreground tap (app already running).
       FirebaseMessaging.onMessageOpenedApp.listen((m) {
-        onTapPayload?.call(m.data);
+        onTapPayload?.call(m.data, fromColdStart: false);
       });
 
       // Foreground message.

@@ -44,6 +44,12 @@ class MyApp extends ConsumerStatefulWidget {
 }
 
 class _MyAppState extends ConsumerState<MyApp> {
+  /// A deep-link captured before the user was authenticated (e.g. a terminated
+  /// launch, where the FCM initial message arrives while the stored session is
+  /// still loading). Processed once auth resolves. Always treated as a cold
+  /// start, so the navigation stack is rebuilt beneath the detail.
+  Map<String, dynamic>? _pendingDeepLink;
+
   @override
   void initState() {
     super.initState();
@@ -56,7 +62,7 @@ class _MyAppState extends ConsumerState<MyApp> {
   /// can break app startup.
   Future<void> _bootstrapNotifications() async {
     final push = ref.read(pushServiceProvider);
-    push.onTapPayload = _handleDeepLink;
+    push.onTapPayload = _onPushTap;
     push.onForeground = _handleForeground;
 
     AuthController.onLogout = () async {
@@ -64,25 +70,77 @@ class _MyAppState extends ConsumerState<MyApp> {
       ref.read(notificationsProvider.notifier).reset();
     };
 
+    // initialize() may fire onTapPayload synchronously (getInitialMessage) —
+    // if auth isn't ready yet, that tap is stored in _pendingDeepLink.
     await push.initialize();
 
     final auth = ref.read(authControllerProvider);
     if (auth.status == AuthStatus.authenticated) {
       await push.syncToken();
       await ref.read(notificationsProvider.notifier).refreshUnread();
+      _processPendingDeepLink();
     }
   }
 
-  /// Route a tapped notification to its destination.
-  void _handleDeepLink(Map<String, dynamic> data) {
+  /// Entry point for every notification tap. Defers navigation until the user
+  /// is authenticated (role must be known and the router must be past splash);
+  /// otherwise routes immediately.
+  void _onPushTap(Map<String, dynamic> data, {required bool fromColdStart}) {
+    final auth = ref.read(authControllerProvider);
+    if (auth.status != AuthStatus.authenticated) {
+      // Not ready (cold start still loading the session, or logged out) —
+      // stash it and navigate once authenticated.
+      _pendingDeepLink = data;
+      return;
+    }
+    _navigateDeepLink(data, fromColdStart: fromColdStart);
+  }
+
+  /// Flush a deferred deep-link after auth resolves. It came from a cold start,
+  /// so the stack is rebuilt beneath the detail.
+  void _processPendingDeepLink() {
+    final data = _pendingDeepLink;
+    if (data == null) return;
+    _pendingDeepLink = null;
+    _navigateDeepLink(data, fromColdStart: true);
+  }
+
+  /// Route a tapped notification. Admins open Appointment Management
+  /// (approve/reject); patients open Appointment Details. On a cold start the
+  /// dashboard is placed beneath the detail so Back never lands on splash.
+  void _navigateDeepLink(Map<String, dynamic> data,
+      {required bool fromColdStart}) {
     final type = data['type'];
     final appointmentId = data['appointment_id'];
     if (type == 'appointment' &&
         appointmentId is String &&
         appointmentId.isNotEmpty) {
-      ref.read(routerProvider).push('/appointments/$appointmentId');
+      final router = ref.read(routerProvider);
+      final isAdmin = ref.read(authControllerProvider).isAdmin;
+      final target = appointmentNotificationRoute(
+        isAdmin: isAdmin,
+        appointmentId: appointmentId,
+      );
+
+      if (fromColdStart) {
+        // Rebuild the stack: Dashboard (base) → target. Push after the
+        // dashboard frame settles so Back returns to it, not the splash route.
+        router.go('/dashboard');
+        WidgetsBinding.instance
+            .addPostFrameCallback((_) => router.push(target));
+      } else {
+        // App already running — a normal push keeps the existing back stack.
+        router.push(target);
+      }
+
+      // Mark the notification read after navigating (requirement 5). Works even
+      // when the list isn't loaded (cold start) via a by-id API call.
+      final notificationId = data['notification_id'];
+      if (notificationId is String && notificationId.isNotEmpty) {
+        ref.read(notificationsProvider.notifier).markReadById(notificationId);
+        return;
+      }
     }
-    // The badge is refreshed after any tap (the target screen marks it read).
     ref.read(notificationsProvider.notifier).refreshUnread();
   }
 
@@ -115,7 +173,7 @@ class _MyAppState extends ConsumerState<MyApp> {
           ),
           action: SnackBarAction(
             label: 'View',
-            onPressed: () => _handleDeepLink(message.data),
+            onPressed: () => _onPushTap(message.data, fromColdStart: false),
           ),
         ),
       );
@@ -126,13 +184,15 @@ class _MyAppState extends ConsumerState<MyApp> {
     final router = ref.watch(routerProvider);
     final themeState = ref.watch(themeProvider);
 
-    // Register the device token the moment the user becomes authenticated.
+    // Register the device token the moment the user becomes authenticated, and
+    // flush any deep-link that arrived before login (e.g. a terminated launch).
     ref.listen<AuthState>(authControllerProvider, (prev, next) {
       if (next.status == AuthStatus.authenticated &&
           prev?.status != AuthStatus.authenticated) {
         final push = ref.read(pushServiceProvider);
         push.syncToken();
         ref.read(notificationsProvider.notifier).refreshUnread();
+        _processPendingDeepLink();
       }
     });
 
