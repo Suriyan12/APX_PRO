@@ -3,11 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:apx_pro/core/theme/app_theme_extension.dart';
 import 'package:apx_pro/core/theme/glass.dart';
-import 'package:apx_pro/core/network/api_client.dart';
 import 'package:apx_pro/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:apx_pro/features/consultation/data/appointment_model.dart';
 import 'package:apx_pro/features/consultation/presentation/controllers/appointment_controller.dart';
 import 'package:apx_pro/features/notifications/presentation/widgets/notification_bell.dart';
+import 'package:apx_pro/features/rehab/data/rehab_models.dart';
+import 'package:apx_pro/features/rehab/presentation/controllers/rehab_controller.dart';
 
 class HomeTab extends ConsumerStatefulWidget {
   const HomeTab({super.key});
@@ -17,64 +18,35 @@ class HomeTab extends ConsumerStatefulWidget {
 }
 
 class _HomeTabState extends ConsumerState<HomeTab> {
-  final ApiClient _apiClient = ApiClient();
-  int _todayCompleted = 0;
-  int _todayTotal = 0;
-  bool _loadingProgram = true;
-
   @override
   void initState() {
     super.initState();
-    _loadProgramData();
-    // Trigger appointment load if provider is empty
+    // Populate the shared providers if they haven't loaded yet. The rehab
+    // program uses the SAME provider (and backend endpoint) as the
+    // Rehabilitation tab, so the Dashboard and that screen read one source of
+    // truth and can never disagree (previously the Dashboard read the legacy
+    // /programs system, which stays empty when a /rehab program is assigned).
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final s = ref.read(appointmentProvider);
-      if (!s.loading && s.appointments.isEmpty) {
+      final appt = ref.read(appointmentProvider);
+      if (!appt.loading && appt.appointments.isEmpty) {
         ref.read(appointmentProvider.notifier).load();
       }
+      final rehab = ref.read(myRehabProgramProvider);
+      if (!rehab.loading && rehab.data == null && rehab.error == null) {
+        ref.read(myRehabProgramProvider.notifier).load();
+      }
     });
-  }
-
-  Future<void> _loadProgramData() async {
-    setState(() { _loadingProgram = true; });
-    try {
-      final results = await Future.wait([
-        _apiClient.get('/programs/workout-logs/today'),
-        _apiClient.get('/programs/my-active'),
-      ]);
-
-      final todayLogs = results[0].data as List;
-      final programs = results[1].data as List;
-
-      int total = 0;
-      if (programs.isNotEmpty) {
-        try {
-          final exResp = await _apiClient.get('/programs/${programs[0]['id']}/exercises');
-          total = (exResp.data as List).length;
-        } catch (_) {}
-      }
-
-      if (mounted) {
-        setState(() {
-          _todayCompleted = todayLogs.length;
-          _todayTotal = total;
-          _loadingProgram = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _loadingProgram = false;
-        });
-      }
-    }
   }
 
   Future<void> _refresh() async {
     await Future.wait([
       ref.read(appointmentProvider.notifier).load(),
-      _loadProgramData(),
+      ref.read(myRehabProgramProvider.notifier).load(),
     ]);
+  }
+
+  void _startWorkout(RehabProgramModel program) {
+    context.push('/rehab/workout', extra: program);
   }
 
   String _formatAppointmentTime(DateTime dt) {
@@ -98,12 +70,14 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     final userName = authState.userName ?? 'there';
     final firstName = userName.split(' ').first;
     final isAdmin = authState.isAdmin;
-    final progress = _todayTotal > 0 ? _todayCompleted / _todayTotal : 0.0;
 
     // Watch the global appointment provider — updates automatically when
     // an appointment is booked or cancelled from any tab.
     final apptState = ref.watch(appointmentProvider);
     final nextAppointment = apptState.nextUpcoming;
+
+    // Same provider the Rehabilitation tab watches — one source of truth.
+    final rehabState = ref.watch(myRehabProgramProvider);
 
     return RefreshIndicator(
       onRefresh: _refresh,
@@ -205,64 +179,14 @@ class _HomeTabState extends ConsumerState<HomeTab> {
             ],
             const SizedBox(height: 28),
 
-            // ── Daily Checklist ──────────────────────────────────────────
-            _sectionLabel(context, 'Daily Checklist'),
-            const SizedBox(height: 12),
-            GlassCard(
-              child: _loadingProgram
-                  ? Center(
-                      child: CircularProgressIndicator(
-                          color: ext.primary))
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Physiotherapy Exercises',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                                color: ext.textPrimary,
-                              ),
-                            ),
-                            Text(
-                              _todayTotal > 0
-                                  ? '$_todayCompleted / $_todayTotal'
-                                  : 'None',
-                              style: TextStyle(
-                                color: ext.primary,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(6),
-                          child: LinearProgressIndicator(
-                            value: progress.clamp(0.0, 1.0),
-                            minHeight: 6,
-                            backgroundColor:
-                                Colors.white.withValues(alpha: 0.1),
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                                ext.primary),
-                          ),
-                        ),
-                        if (_todayTotal > 0) ...[
-                          const SizedBox(height: 10),
-                          Text(
-                            '${(progress * 100).toInt()}% complete today',
-                            style: TextStyle(
-                                color: ext.textSecondary, fontSize: 12),
-                          ),
-                        ],
-                      ],
-                    ),
-            ),
-            const SizedBox(height: 28),
+            // ── Today's Workout ──────────────────────────────────────────
+            // Patients only — an admin has no personal rehab program.
+            if (!isAdmin) ...[
+              _sectionLabel(context, "Today's Workout"),
+              const SizedBox(height: 12),
+              GlassCard(child: _todayWorkoutBody(rehabState)),
+              const SizedBox(height: 28),
+            ],
 
             // ── Upcoming Consultation ────────────────────────────────────
             _sectionLabel(context, 'Upcoming Consultation'),
@@ -285,6 +209,171 @@ class _HomeTabState extends ConsumerState<HomeTab> {
               ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// The Today's Workout card body, driven entirely by [myRehabProgramProvider]
+  /// — the same state the Rehabilitation tab renders. Counts mirror that
+  /// screen's logic: when a session exists it is authoritative for today,
+  /// otherwise today's total is the program's exercise count with 0 completed.
+  Widget _todayWorkoutBody(MyRehabProgramState state) {
+    final ext = context.ext;
+
+    if (state.loading && state.data == null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Center(child: CircularProgressIndicator(color: ext.primary)),
+      );
+    }
+
+    // No active rehab program (backend 404 → data null) or a transient error.
+    // Show a helpful empty state — never a bare "None".
+    if (state.data == null) {
+      return Row(
+        children: [
+          Icon(Icons.self_improvement_rounded, color: ext.textMuted, size: 22),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'No active program',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: ext.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  state.error ?? "Your therapist hasn't assigned a program yet.",
+                  style: TextStyle(color: ext.textSecondary, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    final data = state.data!;
+    final program = data.program;
+    final session = data.todaySession;
+    final total =
+        session != null ? session.exercisesTotal : program.exercises.length;
+    final completed = session != null
+        ? (session.isCompleted ? session.exercisesTotal : session.exercisesCompleted)
+        : 0;
+    final pct = total > 0 ? completed / total : 0.0;
+    final isDone = session?.isCompleted == true;
+    final inProgress = session != null && !isDone;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Program',
+                      style: TextStyle(color: ext.textSecondary, fontSize: 11)),
+                  const SizedBox(height: 2),
+                  Text(
+                    program.title,
+                    style: TextStyle(
+                      color: ext.textPrimary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (isDone) _completedBadge(ext),
+          ],
+        ),
+        const SizedBox(height: 14),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              '$total ${total == 1 ? 'Exercise' : 'Exercises'}',
+              style: TextStyle(
+                color: ext.textPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            Text(
+              isDone
+                  ? '$total/$total exercises'
+                  : '$completed/$total completed today',
+              style: TextStyle(
+                color: ext.primary,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: LinearProgressIndicator(
+            value: pct.clamp(0.0, 1.0),
+            minHeight: 6,
+            backgroundColor: Colors.white.withValues(alpha: 0.1),
+            valueColor: AlwaysStoppedAnimation<Color>(
+                isDone ? ext.success : ext.primary),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          isDone ? '100% Complete' : '${(pct * 100).toInt()}% complete today',
+          style: TextStyle(color: ext.textSecondary, fontSize: 12),
+        ),
+        if (!isDone) ...[
+          const SizedBox(height: 16),
+          GlassButton(
+            width: double.infinity,
+            label: program.isActive
+                ? (inProgress ? 'Continue Workout' : 'Start Workout')
+                : 'Program Inactive',
+            icon: Icons.play_arrow_rounded,
+            onTap: program.isActive ? () => _startWorkout(program) : null,
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _completedBadge(AppThemeExtension ext) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        color: ext.success.withValues(alpha: 0.15),
+        border: Border.all(color: ext.success.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check_circle_rounded, color: ext.success, size: 16),
+          const SizedBox(width: 4),
+          Text(
+            'Completed Today',
+            style: TextStyle(
+              color: ext.success,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
       ),
     );
   }
