@@ -71,7 +71,9 @@ class _FakeMessaging:
         self.sent.append(kw)
         return ("message", kw)
 
-    def send_each_for_multicast(self, message):
+    def send_each_for_multicast(self, message, app=None):
+        # Production sends to a NAMED app (send_each_for_multicast(msg, app=...));
+        # the fake must accept that kwarg or every send raises TypeError.
         if self._raise:
             raise RuntimeError("network down")
         return self._batch
@@ -112,7 +114,11 @@ def test_total_send_failure_reports_all_failed_without_deactivating():
     assert result.skipped is False
 
 
-def test_disabled_transport_skips():
+def test_disabled_transport_skips(monkeypatch):
+    # Force FCM off so the test is deterministic regardless of the machine's
+    # local .env (a dev box configured for real push would otherwise init it).
+    from app.services import push_service as ps
+    monkeypatch.setattr(ps.settings, "FCM_ENABLED", False)
     svc = FirebasePushService()  # FCM disabled → _messaging is None
     assert svc.enabled is False
     result = svc.send_to_tokens(["a"], "T", "B")

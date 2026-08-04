@@ -47,6 +47,7 @@ class FirebasePushService:
 
     def __init__(self) -> None:
         self._messaging = None  # the firebase_admin.messaging module when ready
+        self._app = None        # the named firebase_admin app; set on successful init
         self._init()
 
     # ── Initialization ─────────────────────────────────────────────────────────

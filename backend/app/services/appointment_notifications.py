@@ -46,6 +46,42 @@ def _active_admin_ids(db: Session) -> list:
     return [r[0] for r in rows]
 
 
+def _notify_admins(
+    db: Session,
+    background_tasks: BackgroundTasks,
+    content: "templates.NotificationContent",
+) -> None:
+    """Fan a single piece of content out to every active admin (one notification
+    each). Exactly one notification per admin — never duplicated."""
+    svc = _service(db)
+    for admin_id in _active_admin_ids(db):
+        svc.create_notification(
+            user_id=admin_id,
+            title=content.title,
+            body=content.body,
+            type=content.type,
+            data=content.data,
+            background_tasks=background_tasks,
+        )
+
+
+def _notify_user(
+    db: Session,
+    background_tasks: BackgroundTasks,
+    user_id: UUID,
+    content: "templates.NotificationContent",
+) -> None:
+    """Deliver a single notification to one user."""
+    _service(db).create_notification(
+        user_id=user_id,
+        title=content.title,
+        body=content.body,
+        type=content.type,
+        data=content.data,
+        background_tasks=background_tasks,
+    )
+
+
 def notify_appointment_requested(
     db: Session,
     background_tasks: BackgroundTasks,
@@ -56,17 +92,8 @@ def notify_appointment_requested(
 ) -> None:
     """Notify every active admin that a patient requested an appointment."""
     try:
-        svc = _service(db)
         content = templates.appointment_requested(patient_name, appointment_id, when_str)
-        for admin_id in _active_admin_ids(db):
-            svc.create_notification(
-                user_id=admin_id,
-                title=content.title,
-                body=content.body,
-                type=content.type,
-                data=content.data,
-                background_tasks=background_tasks,
-            )
+        _notify_admins(db, background_tasks, content)
     except Exception:
         logger.exception(
             "Failed to create appointment-requested notifications for %s", appointment_id
@@ -85,14 +112,7 @@ def notify_appointment_approved(
     """Notify the patient that their appointment was approved."""
     try:
         content = templates.appointment_approved(appointment_id, when_str, is_online)
-        _service(db).create_notification(
-            user_id=patient_id,
-            title=content.title,
-            body=content.body,
-            type=content.type,
-            data=content.data,
-            background_tasks=background_tasks,
-        )
+        _notify_user(db, background_tasks, patient_id, content)
     except Exception:
         logger.exception(
             "Failed to create appointment-approved notification for %s", appointment_id
@@ -111,15 +131,122 @@ def notify_appointment_rejected(
     """Notify the patient that their appointment request was declined."""
     try:
         content = templates.appointment_rejected(appointment_id, when_str, reason)
-        _service(db).create_notification(
-            user_id=patient_id,
-            title=content.title,
-            body=content.body,
-            type=content.type,
-            data=content.data,
-            background_tasks=background_tasks,
-        )
+        _notify_user(db, background_tasks, patient_id, content)
     except Exception:
         logger.exception(
             "Failed to create appointment-rejected notification for %s", appointment_id
+        )
+
+
+# ── Reschedule ────────────────────────────────────────────────────────────────
+
+def notify_appointment_reschedule_requested(
+    db: Session,
+    background_tasks: BackgroundTasks,
+    *,
+    appointment_id: UUID,
+    patient_name: str,
+    old_when: str,
+    new_when: str,
+) -> None:
+    """Notify every active admin that a patient requested a reschedule.
+
+    Wired to the reschedule route so the admins' Notification Center reflects the
+    request the same way an initial booking does — this closes the gap where a
+    reschedule only sent email and produced no in-app/push notification.
+    """
+    try:
+        content = templates.appointment_reschedule_requested(
+            patient_name, appointment_id, old_when, new_when
+        )
+        _notify_admins(db, background_tasks, content)
+    except Exception:
+        logger.exception(
+            "Failed to create reschedule-requested notifications for %s", appointment_id
+        )
+
+
+def notify_appointment_reschedule_approved(
+    db: Session,
+    background_tasks: BackgroundTasks,
+    *,
+    appointment_id: UUID,
+    patient_id: UUID,
+    when_str: str,
+    is_online: bool,
+) -> None:
+    """Notify the patient that their reschedule request was approved."""
+    try:
+        content = templates.appointment_reschedule_approved(
+            appointment_id, when_str, is_online
+        )
+        _notify_user(db, background_tasks, patient_id, content)
+    except Exception:
+        logger.exception(
+            "Failed to create reschedule-approved notification for %s", appointment_id
+        )
+
+
+def notify_appointment_reschedule_rejected(
+    db: Session,
+    background_tasks: BackgroundTasks,
+    *,
+    appointment_id: UUID,
+    patient_id: UUID,
+    when_str: str,
+    reason: Optional[str] = None,
+) -> None:
+    """Notify the patient that their reschedule request was declined."""
+    try:
+        content = templates.appointment_reschedule_rejected(
+            appointment_id, when_str, reason
+        )
+        _notify_user(db, background_tasks, patient_id, content)
+    except Exception:
+        logger.exception(
+            "Failed to create reschedule-rejected notification for %s", appointment_id
+        )
+
+
+# ── Cancellation ──────────────────────────────────────────────────────────────
+
+def notify_appointment_cancelled_by_patient(
+    db: Session,
+    background_tasks: BackgroundTasks,
+    *,
+    appointment_id: UUID,
+    patient_name: str,
+    when_str: str,
+    reason: Optional[str] = None,
+) -> None:
+    """Notify every active admin that a patient cancelled their appointment."""
+    try:
+        content = templates.appointment_cancelled_by_patient(
+            patient_name, appointment_id, when_str, reason
+        )
+        _notify_admins(db, background_tasks, content)
+    except Exception:
+        logger.exception(
+            "Failed to create patient-cancellation notifications for %s", appointment_id
+        )
+
+
+def notify_appointment_cancelled_by_admin(
+    db: Session,
+    background_tasks: BackgroundTasks,
+    *,
+    appointment_id: UUID,
+    patient_id: UUID,
+    when_str: str,
+    reason: Optional[str] = None,
+) -> None:
+    """Notify the patient that the clinic cancelled their appointment."""
+    try:
+        content = templates.appointment_cancelled_by_admin(
+            appointment_id, when_str, reason
+        )
+        _notify_user(db, background_tasks, patient_id, content)
+    except Exception:
+        logger.exception(
+            "Failed to create admin-cancellation notification for %s", appointment_id
         )
