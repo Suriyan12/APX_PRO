@@ -180,6 +180,18 @@ def reschedule_appointment(
             consultation_type=appt.consultation_type.value,
             appointment_id=str(appt.id),
         )
+    # In-app / push: notify every active admin that a reschedule awaits review.
+    # (Previously the reschedule flow sent email only — no Notification Center
+    # entry was ever created, so a reschedule produced no in-app/push alert.)
+    old_date, old_time = _fmt_slot(appt.previous_start_time, appt.previous_end_time)
+    new_date, new_time = _fmt_slot(appt.start_time, appt.end_time)
+    notify.notify_appointment_reschedule_requested(
+        db, bg,
+        appointment_id=appt.id,
+        patient_name=patient_name,
+        old_when=f"{old_date}, {old_time}",
+        new_when=f"{new_date}, {new_time}",
+    )
     return appt
 
 
@@ -210,15 +222,27 @@ def approve_appointment(
         appointment_id=str(appt.id),
         is_reschedule=getattr(appt, "was_reschedule", False),
     )
-    # Notify the patient their appointment was approved.
+    # Notify the patient. A reschedule-approval reads differently from an initial
+    # approval, so branch on the transient flag the service captured pre-clear.
     date_str, time_str = _fmt_slot(appt.start_time, appt.end_time)
-    notify.notify_appointment_approved(
-        db, bg,
-        appointment_id=appt.id,
-        patient_id=appt.patient_id,
-        when_str=f"{date_str}, {time_str}",
-        is_online=(appt.consultation_type.value == "online"),
-    )
+    when_str = f"{date_str}, {time_str}"
+    is_online = appt.consultation_type.value == "online"
+    if getattr(appt, "was_reschedule", False):
+        notify.notify_appointment_reschedule_approved(
+            db, bg,
+            appointment_id=appt.id,
+            patient_id=appt.patient_id,
+            when_str=when_str,
+            is_online=is_online,
+        )
+    else:
+        notify.notify_appointment_approved(
+            db, bg,
+            appointment_id=appt.id,
+            patient_id=appt.patient_id,
+            when_str=when_str,
+            is_online=is_online,
+        )
     return appt
 
 
@@ -244,15 +268,26 @@ def reject_appointment(
         consultation_type=appt.consultation_type.value,
         is_reschedule=getattr(appt, "was_reschedule", False),
     )
-    # Notify the patient their appointment request was declined.
+    # Notify the patient. A rejected reschedule request reads differently from a
+    # rejected initial booking, so branch on the transient flag.
     date_str, time_str = _fmt_slot(appt.start_time, appt.end_time)
-    notify.notify_appointment_rejected(
-        db, bg,
-        appointment_id=appt.id,
-        patient_id=appt.patient_id,
-        when_str=f"{date_str}, {time_str}",
-        reason=appt.cancellation_reason,
-    )
+    when_str = f"{date_str}, {time_str}"
+    if getattr(appt, "was_reschedule", False):
+        notify.notify_appointment_reschedule_rejected(
+            db, bg,
+            appointment_id=appt.id,
+            patient_id=appt.patient_id,
+            when_str=when_str,
+            reason=appt.cancellation_reason,
+        )
+    else:
+        notify.notify_appointment_rejected(
+            db, bg,
+            appointment_id=appt.id,
+            patient_id=appt.patient_id,
+            when_str=when_str,
+            reason=appt.cancellation_reason,
+        )
     return appt
 
 
@@ -280,6 +315,26 @@ def cancel_appointment(
         reason=appt.cancellation_reason,
         appointment_id=str(appt.id),
     )
+    # In-app / push: the recipient is whoever DIDN'T perform the cancellation.
+    # Admin cancels → notify the patient; patient cancels → notify the admins.
+    date_str, time_str = _fmt_slot(appt.start_time, appt.end_time)
+    when_str = f"{date_str}, {time_str}"
+    if current_user.role == UserRole.ADMIN:
+        notify.notify_appointment_cancelled_by_admin(
+            db, bg,
+            appointment_id=appt.id,
+            patient_id=appt.patient_id,
+            when_str=when_str,
+            reason=appt.cancellation_reason,
+        )
+    else:
+        notify.notify_appointment_cancelled_by_patient(
+            db, bg,
+            appointment_id=appt.id,
+            patient_name=appt.patient.full_name,
+            when_str=when_str,
+            reason=appt.cancellation_reason,
+        )
     return appt
 
 
