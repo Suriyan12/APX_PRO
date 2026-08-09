@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -107,3 +108,32 @@ def read_root():
         "service": settings.PROJECT_NAME,
         "version": "1.0.0"
     }
+
+
+# ── Notification retention cleanup (runs on startup, then daily) ───────────────
+# Hard-deletes notifications older than the retention window so the table does
+# not grow without bound. Self-contained (no external scheduler); disable with
+# NOTIFICATION_CLEANUP_ENABLED=False. The delete is run in a worker thread so it
+# never blocks the event loop, and every failure is swallowed + logged.
+async def _notification_cleanup_loop():
+    from app.services.notification_cleanup import purge_old_notifications
+
+    while True:
+        try:
+            await asyncio.to_thread(purge_old_notifications)
+        except Exception:
+            logger.exception("Notification cleanup run failed")
+        await asyncio.sleep(24 * 60 * 60)  # once per day
+
+
+@app.on_event("startup")
+async def _start_background_jobs():
+    if settings.NOTIFICATION_CLEANUP_ENABLED:
+        # Keep a reference so the task is not garbage-collected.
+        app.state.notification_cleanup_task = asyncio.create_task(
+            _notification_cleanup_loop()
+        )
+        logger.info(
+            "Notification cleanup job scheduled (retention=%d days)",
+            settings.NOTIFICATION_RETENTION_DAYS,
+        )

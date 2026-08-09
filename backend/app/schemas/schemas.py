@@ -699,6 +699,11 @@ class MarkAllReadResponse(BaseModel):
     updated: int
 
 
+class ClearAllNotificationsResponse(BaseModel):
+    success: bool
+    deleted_count: int
+
+
 # --- HELP CENTER SCHEMAS ---
 
 def _validate_category(v: str) -> str:

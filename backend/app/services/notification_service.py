@@ -102,6 +102,16 @@ class NotificationService:
         logger.info("Marked %d notification(s) read for user %s", updated, user.id)
         return updated
 
+    def clear_all_notifications(self, user: User) -> dict:
+        """Permanently delete every notification for this user (hard delete).
+
+        Scoped to `user.id` (which comes from the authenticated request), so a
+        client can never clear another account's notifications. Returns the
+        deletion count for the client to surface."""
+        deleted = self.notifications.delete_all_for_user(user.id)
+        logger.info("Cleared %d notification(s) for user %s", deleted, user.id)
+        return {"success": True, "deleted_count": deleted}
+
     # ── Notification creation (used by other modules in later phases) ──────────
 
     def create_notification(

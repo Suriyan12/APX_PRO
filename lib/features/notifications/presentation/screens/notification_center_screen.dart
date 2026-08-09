@@ -65,6 +65,86 @@ class _NotificationCenterScreenState
     }
   }
 
+  Future<void> _confirmClearAll(NotificationsNotifier notifier) async {
+    final confirmed = await showGlassDialog<bool>(
+      context: context,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Clear Notifications',
+              style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Are you sure you want to permanently remove all notifications?\n\n'
+              'This action cannot be undone.',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 14, height: 1.4),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                // Cancel is the default (safe) action — listed first.
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => Navigator.of(context).pop(false),
+                    child: GlassCard(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: const Center(
+                        child: Text('Cancel',
+                            style: TextStyle(color: AppColors.textSecondary)),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => Navigator.of(context).pop(true),
+                    child: GlassCard(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      tint: const Color(0x18D50000),
+                      child: const Center(
+                        child: Text('Clear All',
+                            style: TextStyle(
+                                color: AppColors.error,
+                                fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true) return; // Cancel / dismiss
+
+    try {
+      final count = await notifier.clearAll();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+            count > 0 ? 'All notifications cleared.' : 'No notifications to clear.'),
+        backgroundColor: AppColors.success,
+      ));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Could not clear notifications. Please try again.'),
+        backgroundColor: AppColors.error,
+      ));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(notificationsProvider);
@@ -86,6 +166,12 @@ class _NotificationCenterScreenState
               onPressed: notifier.markAllRead,
               child: const Text('Mark all read',
                   style: TextStyle(color: AppColors.primary, fontSize: 13)),
+            ),
+          if (state.items.isNotEmpty)
+            TextButton(
+              onPressed: () => _confirmClearAll(notifier),
+              child: const Text('Clear all',
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
             ),
         ],
       ),
