@@ -6,6 +6,7 @@ import 'package:apx_pro/core/theme/glass.dart';
 import 'package:apx_pro/features/admin/presentation/admin_users_screen.dart';
 import 'package:apx_pro/features/admin/presentation/admin_appointments_screen.dart';
 import 'package:apx_pro/features/notes/presentation/screens/admin/admin_notes_screen.dart';
+import 'package:apx_pro/features/help_center/presentation/screens/admin_help_center_screen.dart';
 
 class AdminPanelScreen extends StatefulWidget {
   const AdminPanelScreen({super.key});
@@ -18,11 +19,12 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final _usersKey = GlobalKey<AdminUsersScreenState>();
+  final _helpKey = GlobalKey<AdminHelpCenterScreenState>();
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -44,6 +46,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
             AdminUsersScreen(key: _usersKey),
             const AdminAppointmentsView(),
             const AdminNotesView(),
+            AdminHelpCenterScreen(key: _helpKey),
           ],
         ),
       ),
@@ -156,6 +159,11 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                               icon: Icon(Icons.menu_book_rounded, size: 17),
                               text: 'Notes',
                             ),
+                            Tab(
+                              iconMargin: EdgeInsets.only(bottom: 2),
+                              icon: Icon(Icons.ondemand_video_rounded, size: 17),
+                              text: 'Help',
+                            ),
                           ],
                         ),
                       ],
@@ -179,6 +187,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
             label: 'Add User',
             icon: Icons.person_add_rounded,
             onTap: () => _usersKey.currentState?.showAddUserSheet(),
+          );
+        }
+        if (_tabController.index == 3) {
+          return GlassButton(
+            label: 'Add Video',
+            icon: Icons.video_call_rounded,
+            onTap: () => _helpKey.currentState?.showAddSheet(),
           );
         }
         // Notes tab (index 2) provides its own in-view "Upload Note" button;

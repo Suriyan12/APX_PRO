@@ -26,6 +26,7 @@ from app.api.v1 import (
     rehab,
     medical_records,
     notifications,
+    help_center,
 )
 
 # Interactive docs + OpenAPI schema are disabled in production so the full
@@ -90,6 +91,7 @@ app.include_router(users.router, prefix=f"{settings.API_V1_STR}/users", tags=["U
 app.include_router(rehab.router, prefix=f"{settings.API_V1_STR}/rehab", tags=["Rehabilitation Programs"])
 app.include_router(medical_records.router, prefix=f"{settings.API_V1_STR}/medical-records", tags=["Medical Records (Google Drive)"])
 app.include_router(notifications.router, prefix=f"{settings.API_V1_STR}/notifications", tags=["Notifications"])
+app.include_router(help_center.router, prefix=f"{settings.API_V1_STR}/help-videos", tags=["Help Center"])
 
 
 # NOTE: the legacy S3-backed /reports and /scans (posture) modules were removed.

@@ -55,6 +55,13 @@ class _NotificationCenterScreenState
         isAdmin: isAdmin,
         appointmentId: appointmentId,
       ));
+      return;
+    }
+    // Every other type (e.g. Help Center) uses the generic deep-link route
+    // supplied in the payload (e.g. "/help/{id}").
+    final route = n.deepLinkRoute;
+    if (route != null && route.isNotEmpty) {
+      context.push(route);
     }
   }
 

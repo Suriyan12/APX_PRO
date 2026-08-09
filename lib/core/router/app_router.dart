@@ -33,6 +33,7 @@ import 'package:apx_pro/features/consultation/data/appointment_model.dart';
 import 'package:apx_pro/features/consultation/presentation/screens/appointment_detail_screen.dart';
 import 'package:apx_pro/features/consultation/presentation/screens/appointment_detail_loader_screen.dart';
 import 'package:apx_pro/features/notifications/presentation/screens/notification_center_screen.dart';
+import 'package:apx_pro/features/help_center/presentation/screens/help_video_detail_screen.dart';
 import 'package:apx_pro/features/settings/presentation/settings_screen.dart';
 import 'package:apx_pro/features/settings/presentation/about_us_screen.dart';
 
@@ -123,6 +124,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(path: '/settings/about', builder: (_, __) => const AboutUsScreen()),
+
+      // Help Center — video detail + notification deep-link target (/help/{id}).
+      GoRoute(
+        path: '/help/:helpId',
+        builder: (_, state) =>
+            HelpVideoDetailScreen(helpId: state.pathParameters['helpId']!),
+      ),
       GoRoute(path: '/assessment', builder: (_, __) => const AssessmentScreen()),
       GoRoute(path: '/progress', builder: (_, __) => const ProgressScreen()),
 
