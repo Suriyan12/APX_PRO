@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
 import 'package:apx_pro/core/theme/app_theme_extension.dart';
 import 'package:apx_pro/core/theme/glass.dart';
 import 'package:apx_pro/features/help_center/data/help_models.dart';
 import 'package:apx_pro/features/help_center/presentation/controllers/help_controller.dart';
+import 'package:apx_pro/features/help_center/presentation/widgets/help_youtube_player.dart';
 
 /// Full-screen Help video: an embedded YouTube player (in-app, fullscreen +
 /// landscape supported by the 6.x iframe player), the title/description, and a
@@ -63,7 +63,7 @@ class _DetailBody extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _Player(videoId: v.youtubeVideoId),
+          HelpYoutubePlayer(videoId: v.youtubeVideoId, autoPlay: false),
           const SizedBox(height: 16),
           Text(
             v.category.toUpperCase(),
@@ -109,83 +109,6 @@ class _DetailBody extends StatelessWidget {
                 )),
           ],
         ],
-      ),
-    );
-  }
-}
-
-/// Isolated player so its controller lifecycle (create/close) is self-contained.
-class _Player extends StatefulWidget {
-  final String videoId;
-  const _Player({required this.videoId});
-
-  @override
-  State<_Player> createState() => _PlayerState();
-}
-
-class _PlayerState extends State<_Player> {
-  YoutubePlayerController? _controller;
-  bool _error = false;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.videoId.isEmpty) {
-      _error = true;
-      return;
-    }
-    _controller = YoutubePlayerController.fromVideoId(
-      videoId: widget.videoId,
-      autoPlay: false,
-      params: const YoutubePlayerParams(
-        showControls: true,
-        showFullscreenButton: true,
-        strictRelatedVideos: true,
-        enableCaption: true,
-        playsInline: true,
-      ),
-    );
-    _controller!.stream.listen((state) {
-      if (state.error != YoutubeError.none && mounted && !_error) {
-        setState(() => _error = true);
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller?.close();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final ext = context.ext;
-    if (_error || _controller == null) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: AspectRatio(
-          aspectRatio: 16 / 9,
-          child: Container(
-            color: ext.surfaceOverlay,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.videocam_off_rounded, color: ext.textMuted, size: 40),
-                const SizedBox(height: 8),
-                Text('This video can\'t be played',
-                    style: TextStyle(color: ext.textSecondary, fontSize: 13)),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: AspectRatio(
-        aspectRatio: 16 / 9,
-        child: YoutubePlayer(controller: _controller!),
       ),
     );
   }

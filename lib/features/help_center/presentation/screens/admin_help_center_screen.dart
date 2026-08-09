@@ -7,6 +7,7 @@ import 'package:apx_pro/core/theme/app_theme_extension.dart';
 import 'package:apx_pro/core/theme/glass.dart';
 import 'package:apx_pro/features/help_center/data/help_models.dart';
 import 'package:apx_pro/features/help_center/presentation/controllers/help_controller.dart';
+import 'package:apx_pro/features/help_center/presentation/widgets/help_youtube_player.dart';
 
 /// Admin management view for the Help Center, embedded as a tab in the Admin
 /// Panel. Supports create, edit, activate/deactivate, feature (single at a
@@ -509,6 +510,14 @@ class _HelpVideoFormSheetState extends State<_HelpVideoFormSheet> {
   late bool _isFeatured;
   String? _error;
 
+  // Live YouTube validation/preview state.
+  String? _videoId; // extracted id, or null when the URL is invalid/empty
+  HelpPlayerStatus? _previewStatus; // null until a valid id is entered
+  String? _videoTitle; // resolved from the player metadata, if available
+
+  static const _invalidUrlMessage =
+      'Invalid YouTube URL. Please enter a valid YouTube video link.';
+
   @override
   void initState() {
     super.initState();
@@ -523,6 +532,9 @@ class _HelpVideoFormSheetState extends State<_HelpVideoFormSheet> {
     }
     _isActive = e?.isActive ?? true;
     _isFeatured = e?.isFeatured ?? false;
+    // Seed the preview from an existing video so editing shows it immediately.
+    _videoId = HelpVideoModel.extractYouTubeId(_url.text.trim());
+    _previewStatus = _videoId == null ? null : HelpPlayerStatus.loading;
   }
 
   @override
@@ -533,6 +545,31 @@ class _HelpVideoFormSheetState extends State<_HelpVideoFormSheet> {
     super.dispose();
   }
 
+  void _onUrlChanged(String value) {
+    final id = HelpVideoModel.extractYouTubeId(value.trim());
+    if (id == _videoId) {
+      // Same target (e.g. extra tracking params added) — keep the live preview
+      // state so a verified video doesn't reset to "loading".
+      setState(() {}); // still refresh the invalid message / button state
+      return;
+    }
+    setState(() {
+      _videoId = id;
+      _previewStatus = id == null ? null : HelpPlayerStatus.loading;
+      _videoTitle = null;
+      _error = null;
+    });
+  }
+
+  /// Save/Publish is allowed only when the title is filled, a video id was
+  /// extracted, and the embedded preview reported it actually loaded (verifies
+  /// playback and prevents publishing broken links).
+  bool get _canSave =>
+      _title.text.trim().isNotEmpty &&
+      _videoId != null &&
+      _previewStatus == HelpPlayerStatus.ready &&
+      !(_isFeatured && !_isActive);
+
   void _submit() {
     final title = _title.text.trim();
     final url = _url.text.trim();
@@ -541,8 +578,12 @@ class _HelpVideoFormSheetState extends State<_HelpVideoFormSheet> {
       return;
     }
     if (HelpVideoModel.extractYouTubeId(url) == null) {
+      setState(() => _error = _invalidUrlMessage);
+      return;
+    }
+    if (_previewStatus != HelpPlayerStatus.ready) {
       setState(() => _error =
-          'Enter a valid YouTube URL (youtube.com/watch?v=… or youtu.be/…).');
+          'Please wait for the video preview to load and verify playback.');
       return;
     }
     if (_isFeatured && !_isActive) {
@@ -563,23 +604,41 @@ class _HelpVideoFormSheetState extends State<_HelpVideoFormSheet> {
   Widget build(BuildContext context) {
     final ext = context.ext;
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    final maxHeight = MediaQuery.of(context).size.height * 0.9;
+    // Glass layering: the blur + tint are BACKGROUND siblings, with the content
+    // on top — never a descendant of BackdropFilter. This matches GlassCard /
+    // the admin app bar, and (critically) keeps the embedded YouTube preview
+    // (a platform view / iframe on web) out of a BackdropFilter subtree, which
+    // Flutter-web CanvasKit otherwise fails to composite.
     return Padding(
       padding: EdgeInsets.only(bottom: bottomInset),
       child: ClipRRect(
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-          child: Container(
-            decoration: BoxDecoration(
-              color: ext.glassDialogTint,
-              border: Border.all(color: ext.glassDialogBorder),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                child: const ColoredBox(color: Colors.transparent),
+              ),
             ),
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: ext.glassDialogTint,
+                  border: Border.all(color: ext.glassDialogBorder),
+                ),
+              ),
+            ),
+            ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: maxHeight),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                   Center(
                     child: Container(
                       width: 40,
@@ -600,7 +659,11 @@ class _HelpVideoFormSheetState extends State<_HelpVideoFormSheet> {
                   ),
                   const SizedBox(height: 16),
                   _label(ext, 'Title'),
-                  GlassTextField(controller: _title, hintText: 'e.g. How to Use APX PRO'),
+                  GlassTextField(
+                    controller: _title,
+                    hintText: 'e.g. How to Use APX PRO',
+                    onChanged: (_) => setState(() {}), // re-evaluate Save gate
+                  ),
                   const SizedBox(height: 12),
                   _label(ext, 'Description'),
                   GlassTextField(
@@ -613,9 +676,12 @@ class _HelpVideoFormSheetState extends State<_HelpVideoFormSheet> {
                   const SizedBox(height: 12),
                   _label(ext, 'YouTube URL'),
                   GlassTextField(
-                      controller: _url,
-                      hintText: 'https://youtube.com/watch?v=…',
-                      keyboardType: TextInputType.url),
+                    controller: _url,
+                    hintText: 'https://youtube.com/watch?v=…',
+                    keyboardType: TextInputType.url,
+                    onChanged: _onUrlChanged,
+                  ),
+                  _previewSection(context),
                   const SizedBox(height: 16),
                   _switchRow(ext, 'Active (visible to users)', _isActive,
                       (val) => setState(() {
@@ -633,17 +699,155 @@ class _HelpVideoFormSheetState extends State<_HelpVideoFormSheet> {
                         style: TextStyle(color: ext.error, fontSize: 12.5)),
                   ],
                   const SizedBox(height: 20),
-                  GlassButton(
-                    label: widget.existing == null ? 'Create' : 'Save',
-                    icon: Icons.check_rounded,
-                    width: double.infinity,
-                    onTap: _submit,
+                  Opacity(
+                    opacity: _canSave ? 1.0 : 0.5,
+                    child: GlassButton(
+                      label: widget.existing == null ? 'Create' : 'Save',
+                      icon: Icons.check_rounded,
+                      width: double.infinity,
+                      onTap: _canSave ? _submit : null,
+                    ),
                   ),
-                ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Live validation + embedded preview + confirmation details for the pasted
+  /// YouTube URL. Drives whether Save/Publish is enabled.
+  Widget _previewSection(BuildContext context) {
+    final ext = context.ext;
+    final url = _url.text.trim();
+
+    // Nothing entered yet — stay quiet.
+    if (url.isEmpty && _videoId == null) return const SizedBox.shrink();
+
+    // Entered something that isn't a YouTube video link.
+    if (_videoId == null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Row(
+          children: [
+            Icon(Icons.error_outline_rounded, color: ext.error, size: 16),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(_invalidUrlMessage,
+                  style: TextStyle(color: ext.error, fontSize: 12.5)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final id = _videoId!;
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _label(ext, 'Preview — verify playback before publishing'),
+          HelpYoutubePlayer(
+            key: ValueKey(id),
+            videoId: id,
+            autoPlay: false,
+            onStatusChanged: (s) => setState(() => _previewStatus = s),
+            onTitleResolved: (t) => setState(() => _videoTitle = t),
+          ),
+          const SizedBox(height: 10),
+          _detailsCard(ext, id),
+        ],
+      ),
+    );
+  }
+
+  Widget _detailsCard(AppThemeExtension ext, String id) {
+    Widget statusLine;
+    switch (_previewStatus) {
+      case HelpPlayerStatus.ready:
+        statusLine = Row(children: [
+          Icon(Icons.check_circle_rounded, color: ext.success, size: 15),
+          const SizedBox(width: 5),
+          Text('Playback verified',
+              style: TextStyle(
+                  color: ext.success, fontSize: 12, fontWeight: FontWeight.w600)),
+        ]);
+        break;
+      case HelpPlayerStatus.error:
+        statusLine = Row(children: [
+          Icon(Icons.error_outline_rounded, color: ext.error, size: 15),
+          const SizedBox(width: 5),
+          Expanded(
+            child: Text('This help video is currently unavailable.',
+                style: TextStyle(color: ext.error, fontSize: 12)),
+          ),
+        ]);
+        break;
+      default:
+        statusLine = Row(children: [
+          SizedBox(
+              width: 13,
+              height: 13,
+              child: CircularProgressIndicator(strokeWidth: 2, color: ext.primary)),
+          const SizedBox(width: 6),
+          Text('Loading preview…',
+              style: TextStyle(color: ext.textMuted, fontSize: 12)),
+        ]);
+    }
+
+    return GlassCard(
+      padding: const EdgeInsets.all(10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: SizedBox(
+              width: 92,
+              child: AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Stack(fit: StackFit.expand, children: [
+                  Container(color: ext.surfaceOverlay),
+                  Image.network(
+                    'https://img.youtube.com/vi/$id/hqdefault.jpg',
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Icon(
+                        Icons.ondemand_video_rounded,
+                        color: ext.textMuted,
+                        size: 22),
+                  ),
+                ]),
               ),
             ),
           ),
-        ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (_videoTitle != null && _videoTitle!.isNotEmpty) ...[
+                  Text(_videoTitle!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          color: ext.textPrimary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 3),
+                ],
+                Text('Video ID: $id',
+                    style: TextStyle(color: ext.textSecondary, fontSize: 11.5)),
+                const SizedBox(height: 6),
+                statusLine,
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

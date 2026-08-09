@@ -76,6 +76,15 @@ class Settings(BaseSettings):
     NOTES_PRICE: int = 100  # Amount in paise (Rs. 100)
     STUDY_MATERIAL_MAX_FILE_SIZE_MB: int = 250
 
+    # Study Materials access model. When False (the current product decision),
+    # study materials are FREE + view-only for every authenticated user:
+    # purchase verification is bypassed and no payment UI appears. Set to True
+    # to re-enable the paid model — the Razorpay flow, purchase tables, and all
+    # existing access-control logic resume automatically with no other change.
+    # NOTE: unlike DEVELOPMENT_MODE this is a legitimate product setting, so it
+    # is intentionally allowed in production and has no startup guard.
+    STUDY_MATERIALS_REQUIRE_PAYMENT: bool = False
+
     # Rehabilitation Module — uploaded exercise videos (stored in Google Drive)
     REHAB_VIDEO_MAX_FILE_SIZE_MB: int = 500
 

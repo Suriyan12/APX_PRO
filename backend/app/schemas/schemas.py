@@ -405,6 +405,10 @@ class NotesAccessStatus(BaseModel):
     has_access: bool
     is_admin: bool
     purchased_at: Optional[datetime]
+    # False when study materials are free (payment enforcement disabled). Lets
+    # the client be explicit about free mode; has_access is already True for
+    # everyone in that case, so purchase UI hides regardless.
+    require_payment: bool = True
 
 
 class NotesPurchaseOrderResponse(BaseModel):
