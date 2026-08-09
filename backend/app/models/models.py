@@ -571,3 +571,59 @@ class Notification(Base):
         Index("ix_notifications_user_read", "user_id", "is_read"),
         Index("ix_notifications_user_created", "user_id", "created_at"),
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HELP CENTER
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Supported Help Center categories. Kept as a plain Python tuple (not a DB enum)
+# so new categories can be added later with a one-line code change and no
+# migration — the column itself is a free-form string. "Other" is the catch-all.
+HELP_VIDEO_CATEGORIES = (
+    "Getting Started",
+    "Appointments",
+    "Rehabilitation",
+    "Medical Records",
+    "Study Materials",
+    "Notifications",
+    "Other",
+)
+
+
+class HelpVideo(Base):
+    """An instructional YouTube video in the Help Center, managed by admins.
+
+    Only the YouTube URL and its extracted video id are stored — no video files
+    or thumbnails live on our infrastructure; playback happens via an embedded
+    YouTube player, so there is no storage/bandwidth cost. Users see only
+    `is_active` videos; admins manage all of them.
+
+    At most one video is `is_featured` at a time (the "Featured Tutorial" shown
+    at the top of the Help tab). The single-featured invariant is enforced in the
+    service layer (clear-others-then-set) and additionally guarded in the MSSQL
+    migration by a filtered unique index.
+    """
+    __tablename__ = "help_videos"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    # Free-form category string validated against HELP_VIDEO_CATEGORIES at the
+    # schema/service layer — deliberately not a DB enum so it stays extensible.
+    category = Column(String(50), nullable=False)
+    youtube_url = Column(String(500), nullable=False)
+    youtube_video_id = Column(String(20), nullable=False)
+    display_order = Column(Integer, nullable=False, default=0)
+    is_active = Column(Boolean, nullable=False, default=True)
+    is_featured = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+
+    __table_args__ = (
+        # The user-facing list filters on is_active and orders by (category,
+        # display_order); this composite index serves that access pattern.
+        Index("ix_help_videos_active_order", "is_active", "category", "display_order"),
+        # Fast lookup of the single featured video.
+        Index("ix_help_videos_featured", "is_featured"),
+    )

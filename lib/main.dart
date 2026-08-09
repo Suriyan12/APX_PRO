@@ -112,22 +112,33 @@ class _MyAppState extends ConsumerState<MyApp> {
       {required bool fromColdStart}) {
     final type = data['type'];
     final appointmentId = data['appointment_id'];
+
+    // Resolve the navigation target by notification type. Appointments route by
+    // role; every other type (e.g. Help Center) uses the generic `route` the
+    // backend supplies in the payload (e.g. "/help/{id}").
+    String? target;
     if (type == 'appointment' &&
         appointmentId is String &&
         appointmentId.isNotEmpty) {
-      final router = ref.read(routerProvider);
       final isAdmin = ref.read(authControllerProvider).isAdmin;
-      final target = appointmentNotificationRoute(
+      target = appointmentNotificationRoute(
         isAdmin: isAdmin,
         appointmentId: appointmentId,
       );
+    } else {
+      final route = data['route'];
+      if (route is String && route.isNotEmpty) target = route;
+    }
 
+    if (target != null) {
+      final router = ref.read(routerProvider);
       if (fromColdStart) {
         // Rebuild the stack: Dashboard (base) → target. Push after the
         // dashboard frame settles so Back returns to it, not the splash route.
         router.go('/dashboard');
+        final dest = target;
         WidgetsBinding.instance
-            .addPostFrameCallback((_) => router.push(target));
+            .addPostFrameCallback((_) => router.push(dest));
       } else {
         // App already running — a normal push keeps the existing back stack.
         router.push(target);

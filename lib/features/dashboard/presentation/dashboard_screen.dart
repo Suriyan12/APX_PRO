@@ -4,6 +4,7 @@ import 'package:apx_pro/core/theme/glass.dart';
 import 'package:apx_pro/features/dashboard/presentation/home_tab.dart';
 import 'package:apx_pro/features/rehab/presentation/screens/programs_tab.dart';
 import 'package:apx_pro/features/consultation/presentation/consultation_tab.dart';
+import 'package:apx_pro/features/help_center/presentation/screens/help_tab.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -19,6 +20,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     HomeTab(),
     ProgramsTab(),
     ConsultationTab(),
+    HelpTab(),
   ];
 
   static const _navItems = [
@@ -36,6 +38,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       icon: Icons.calendar_month_outlined,
       activeIcon: Icons.calendar_month_rounded,
       label: 'Consult',
+    ),
+    GlassNavItem(
+      icon: Icons.help_outline_rounded,
+      activeIcon: Icons.help_rounded,
+      label: 'Help',
     ),
   ];
 

@@ -2,7 +2,8 @@ from datetime import datetime, date, timezone
 from typing import Optional, List
 from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field, field_serializer, field_validator
-from app.models.models import UserRole, AppointmentStatus, ConsultationType, ScanStatus, DiscountType, NoteFileType, ExerciseType, VideoType, RehabDifficulty
+from app.models.models import UserRole, AppointmentStatus, ConsultationType, ScanStatus, DiscountType, NoteFileType, ExerciseType, VideoType, RehabDifficulty, HELP_VIDEO_CATEGORIES
+from app.core.youtube import extract_youtube_id
 
 
 # --- USER & AUTH SCHEMAS ---
@@ -692,3 +693,143 @@ class UnreadCountResponse(BaseModel):
 
 class MarkAllReadResponse(BaseModel):
     updated: int
+
+
+# --- HELP CENTER SCHEMAS ---
+
+def _validate_category(v: str) -> str:
+    """Reject unknown categories so the data stays clean. New categories are
+    added by extending HELP_VIDEO_CATEGORIES in models.py (a code change, never
+    a migration) — see the constant's docstring."""
+    if v not in HELP_VIDEO_CATEGORIES:
+        allowed = ", ".join(HELP_VIDEO_CATEGORIES)
+        raise ValueError(f"Category must be one of: {allowed}.")
+    return v
+
+
+def _validate_youtube_url(v: str) -> str:
+    """Ensure the URL is a YouTube link we can extract an id from. The id itself
+    is (re)derived server-side in the service — the client never supplies it."""
+    if extract_youtube_id(v) is None:
+        raise ValueError(
+            "A valid YouTube URL is required "
+            "(youtube.com/watch?v=..., youtu.be/..., /embed/..., or /shorts/...)."
+        )
+    return v
+
+
+class HelpVideoCreate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    description: Optional[str] = Field(None, max_length=5000)
+    category: str = Field(..., max_length=50)
+    youtube_url: str = Field(..., max_length=500)
+    # Optional: when omitted the service appends to the end of the list.
+    display_order: Optional[int] = Field(None, ge=0)
+    is_active: bool = True
+    is_featured: bool = False
+
+    @field_validator("category")
+    @classmethod
+    def _check_category(cls, v: str) -> str:
+        return _validate_category(v)
+
+    @field_validator("youtube_url")
+    @classmethod
+    def _check_url(cls, v: str) -> str:
+        return _validate_youtube_url(v)
+
+
+class HelpVideoUpdate(BaseModel):
+    """Partial update — every field optional. Only provided fields are applied
+    (router uses model_dump(exclude_unset=True))."""
+    title: Optional[str] = Field(None, min_length=1, max_length=200)
+    description: Optional[str] = Field(None, max_length=5000)
+    category: Optional[str] = Field(None, max_length=50)
+    youtube_url: Optional[str] = Field(None, max_length=500)
+    display_order: Optional[int] = Field(None, ge=0)
+    is_active: Optional[bool] = None
+    is_featured: Optional[bool] = None
+
+    @field_validator("category")
+    @classmethod
+    def _check_category(cls, v: Optional[str]) -> Optional[str]:
+        return _validate_category(v) if v is not None else v
+
+    @field_validator("youtube_url")
+    @classmethod
+    def _check_url(cls, v: Optional[str]) -> Optional[str]:
+        return _validate_youtube_url(v) if v is not None else v
+
+
+class HelpVideoResponse(BaseModel):
+    id: UUID
+    title: str
+    description: Optional[str] = None
+    category: str
+    youtube_url: str
+    youtube_video_id: str
+    display_order: int
+    is_active: bool
+    is_featured: bool
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    # Derived, read-only convenience for clients (standard YouTube thumbnail).
+    thumbnail_url: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+    @field_serializer("created_at", "updated_at")
+    def _ser_times(self, dt: Optional[datetime], _info):
+        return _serialize_optional_utc(dt)
+
+    @classmethod
+    def from_model(cls, video) -> "HelpVideoResponse":
+        return cls(
+            id=video.id,
+            title=video.title,
+            description=video.description,
+            category=video.category,
+            youtube_url=video.youtube_url,
+            youtube_video_id=video.youtube_video_id,
+            display_order=video.display_order,
+            is_active=video.is_active,
+            is_featured=video.is_featured,
+            created_at=video.created_at,
+            updated_at=video.updated_at,
+            thumbnail_url=(
+                f"https://img.youtube.com/vi/{video.youtube_video_id}/hqdefault.jpg"
+                if video.youtube_video_id
+                else None
+            ),
+        )
+
+
+class HelpVideoListResponse(BaseModel):
+    items: List[HelpVideoResponse]
+    total: int
+    limit: int
+    offset: int
+
+
+class HelpVideoDetailResponse(BaseModel):
+    """A single video plus a few related videos from the same category (active
+    only, current video excluded)."""
+    video: HelpVideoResponse
+    related: List[HelpVideoResponse] = []
+
+
+class HelpVideoReorderItem(BaseModel):
+    id: UUID
+    display_order: int = Field(..., ge=0)
+
+
+class HelpVideoReorderRequest(BaseModel):
+    items: List[HelpVideoReorderItem] = Field(..., min_length=1)
+
+
+class HelpVideoActiveRequest(BaseModel):
+    is_active: bool
+
+
+class HelpCategoriesResponse(BaseModel):
+    categories: List[str]

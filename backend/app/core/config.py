@@ -99,6 +99,12 @@ class Settings(BaseSettings):
         the Firebase SDK initializing successfully (see FirebasePushService)."""
         return self.FCM_ENABLED
 
+    # Help Center — when True, publishing a new active help video creates an
+    # in-app notification (deep-linked to the video) for every active patient.
+    # Disabled by default: the notification architecture is fully wired but
+    # dormant until a clinic explicitly opts in.
+    HELP_CENTER_NOTIFY_ON_PUBLISH: bool = False
+
     @model_validator(mode="after")
     def _guard_dev_mode_in_production(self):
         # DEVELOPMENT_MODE auto-grants paid Notes access with no payment. It must

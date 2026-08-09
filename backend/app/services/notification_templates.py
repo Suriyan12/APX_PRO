@@ -14,6 +14,7 @@ from dataclasses import dataclass
 
 # Notification `type` values (also used as the top-level category client-side).
 TYPE_APPOINTMENT = "appointment"
+TYPE_HELP = "help"
 
 
 @dataclass(frozen=True)
@@ -152,4 +153,33 @@ def appointment_cancelled_by_admin(
         body=body,
         type=TYPE_APPOINTMENT,
         data=_appointment_data(appointment_id, "cancelled_by_admin"),
+    )
+
+
+# ── Help Center events ──────────────────────────────────────────────────────
+
+def _help_data(help_id, event: str) -> dict:
+    """Deep-link payload for a Help Center notification. `route` mirrors the
+    appointment contract so the Flutter client routes on it the same way."""
+    hid = str(help_id)
+    return {
+        "type": TYPE_HELP,
+        "event": event,
+        "help_id": hid,
+        "route": f"/help/{hid}",
+    }
+
+
+def help_video_published(video_title: str, help_id) -> NotificationContent:
+    """Sent to users when an admin publishes a new Help Center video.
+
+    Optional: the producer is only invoked when
+    `settings.HELP_CENTER_NOTIFY_ON_PUBLISH` is enabled (off by default), so the
+    architecture is present but dormant until a clinic turns it on.
+    """
+    return NotificationContent(
+        title="New Help video available",
+        body=f"Watch our latest tutorial: {video_title}.",
+        type=TYPE_HELP,
+        data=_help_data(help_id, "published"),
     )

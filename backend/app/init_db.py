@@ -19,6 +19,7 @@ from app.models.models import (
     ProgressLog,
     DeviceToken,
     Notification,
+    HelpVideo,
 )
 
 def create_tables():
