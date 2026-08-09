@@ -30,6 +30,11 @@ def _sign(order: str, payment: str) -> str:
 def _no_dev_mode(monkeypatch):
     # Force the production signature path even if a .env enabled dev mode.
     monkeypatch.setattr(settings, "DEVELOPMENT_MODE", False)
+    # These tests exercise the PAID purchase flow, so payment must be enforced.
+    # (The shipped default is free access, which short-circuits verify to
+    # "already_granted" and skips signature checking — correct for free mode,
+    # but not what this suite is asserting.)
+    monkeypatch.setattr(settings, "STUDY_MATERIALS_REQUIRE_PAYMENT", True)
     yield
     with _Session() as db:
         db.query(NotesPurchase).filter(NotesPurchase.user_id == PATIENT_B_ID).delete()

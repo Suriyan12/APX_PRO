@@ -67,6 +67,13 @@ CONTENT_TYPE_MAP = {
 
 
 def _has_notes_access(user: User, db: Session) -> bool:
+    # Feature flag: when payment is disabled, study materials are free for every
+    # authenticated user. This is the single bypass point — every consumer
+    # (view_note gate, access-status reporting, purchase short-circuit) reads
+    # through here, so flipping the flag switches free<->paid consistently.
+    # Nothing about the paid model is removed; it simply is not enforced.
+    if not settings.STUDY_MATERIALS_REQUIRE_PAYMENT:
+        return True
     if user.role == UserRole.ADMIN:
         return True
     if user.has_notes_access:
@@ -171,7 +178,12 @@ def get_access_status(
         )
         if purchase:
             purchased_at = purchase.purchased_at
-    return NotesAccessStatus(has_access=has_access, is_admin=is_admin, purchased_at=purchased_at)
+    return NotesAccessStatus(
+        has_access=has_access,
+        is_admin=is_admin,
+        purchased_at=purchased_at,
+        require_payment=settings.STUDY_MATERIALS_REQUIRE_PAYMENT,
+    )
 
 
 # ---------------------------------------------------------------------------
