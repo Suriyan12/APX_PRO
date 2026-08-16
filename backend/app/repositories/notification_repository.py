@@ -180,3 +180,28 @@ class NotificationRepository:
         )
         self.db.commit()
         return updated
+
+    def delete_all_for_user(self, user_id: uuid.UUID) -> int:
+        """Hard-delete every notification owned by one user in a single bulk
+        DELETE (no row-by-row loop). Scoped to user_id, so it can never touch
+        another user's rows. Returns the number of rows removed."""
+        deleted = (
+            self.db.query(Notification)
+            .filter(Notification.user_id == user_id)
+            .delete(synchronize_session=False)
+        )
+        self.db.commit()
+        return deleted
+
+    def delete_older_than(self, cutoff: datetime) -> int:
+        """Hard-delete notifications created before `cutoff`, in a single bulk
+        DELETE. Used by the retention job. `cutoff` must be a naive UTC datetime
+        to match the naive DATETIME2 values stored in created_at. Returns the
+        number of rows removed."""
+        deleted = (
+            self.db.query(Notification)
+            .filter(Notification.created_at < cutoff)
+            .delete(synchronize_session=False)
+        )
+        self.db.commit()
+        return deleted

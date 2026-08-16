@@ -20,6 +20,7 @@ from app.repositories.notification_repository import (
 )
 from app.services.notification_service import NotificationService
 from app.schemas.schemas import (
+    ClearAllNotificationsResponse,
     DeviceTokenRegisterRequest,
     DeviceTokenResponse,
     DeviceTokenUnregisterRequest,
@@ -98,6 +99,18 @@ def mark_all_read(
 ):
     """Mark all of the current user's notifications as read."""
     return {"updated": _svc(db).mark_all_read(current_user)}
+
+
+@router.delete("/clear-all", response_model=ClearAllNotificationsResponse)
+def clear_all(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Permanently delete all of the current user's notifications (hard delete).
+
+    Scoped to the authenticated user — the client never supplies a user id, so
+    one account can never clear another's notifications."""
+    return _svc(db).clear_all_notifications(current_user)
 
 
 @router.put("/{notification_id}/read", response_model=NotificationResponse)

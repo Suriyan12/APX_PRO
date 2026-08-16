@@ -149,12 +149,14 @@ class _ConsultationTabState extends ConsumerState<ConsultationTab> {
                   Icon(Icons.check_circle_outline,
                       color: AppColors.success, size: 16),
                   SizedBox(width: 8),
-                  Text(
-                    'This consultation is completely FREE',
-                    style: TextStyle(
-                        color: AppColors.success,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13),
+                  Expanded(
+                    child: Text(
+                      'This consultation is completely FREE',
+                      style: TextStyle(
+                          color: AppColors.success,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13),
+                    ),
                   ),
                 ],
               ),
@@ -1017,8 +1019,14 @@ class _ConsultationTabState extends ConsumerState<ConsultationTab> {
             ],
             const SizedBox(height: 10),
             _buildStatusRow(apt),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            // Wrap (not Row) so the action group drops to a second line instead
+            // of overflowing when the badges + actions can't share one line
+            // (e.g. the wider "IN-PERSON" badge alongside Reschedule + Cancel).
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              runSpacing: 10,
+              spacing: 8,
               children: [
                 Row(
                   mainAxisSize: MainAxisSize.min,

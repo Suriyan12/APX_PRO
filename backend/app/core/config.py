@@ -114,6 +114,14 @@ class Settings(BaseSettings):
     # dormant until a clinic explicitly opts in.
     HELP_CENTER_NOTIFY_ON_PUBLISH: bool = False
 
+    # Notification retention. A background job hard-deletes notifications older
+    # than NOTIFICATION_RETENTION_DAYS so the table does not grow without bound
+    # (notifications are operational messages, not business records — the source
+    # data lives in its own tables). Set NOTIFICATION_CLEANUP_ENABLED=False to
+    # turn the job off.
+    NOTIFICATION_CLEANUP_ENABLED: bool = True
+    NOTIFICATION_RETENTION_DAYS: int = 90
+
     @model_validator(mode="after")
     def _guard_dev_mode_in_production(self):
         # DEVELOPMENT_MODE auto-grants paid Notes access with no payment. It must

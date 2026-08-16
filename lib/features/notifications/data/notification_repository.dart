@@ -50,4 +50,11 @@ class NotificationRepository {
     final r = await _api.put('/notifications/read-all');
     return (r.data['updated'] as num?)?.toInt() ?? 0;
   }
+
+  /// Permanently delete all of the current user's notifications (hard delete).
+  /// Returns how many were removed.
+  Future<int> clearAll() async {
+    final r = await _api.delete('/notifications/clear-all');
+    return (r.data['deleted_count'] as num?)?.toInt() ?? 0;
+  }
 }

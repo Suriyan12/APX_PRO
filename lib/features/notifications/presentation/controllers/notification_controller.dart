@@ -170,6 +170,21 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
     }
   }
 
+  /// Permanently delete every notification for the current user (hard delete).
+  /// Clears local state immediately (list empty, badge → 0) so the UI updates
+  /// instantly, then confirms with the server; rolls back on failure. Returns
+  /// the number deleted.
+  Future<int> clearAll() async {
+    final previous = state;
+    state = state.copyWith(items: const [], total: 0, unread: 0);
+    try {
+      return await _repo.clearAll();
+    } catch (e) {
+      state = previous; // restore on failure
+      rethrow;
+    }
+  }
+
   /// Called when the user logs out — clear any in-memory notifications.
   void reset() => state = const NotificationsState();
 
