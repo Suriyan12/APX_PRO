@@ -1,0 +1,23 @@
+# Release signing configuration TEMPLATE.
+#
+# 1. Generate an upload keystore (do this ONCE; keep the .jks + these passwords
+#    safe and backed up — losing them means you can't update the app):
+#
+#      keytool -genkey -v -keystore upload-keystore.jks -storetype JKS ^
+#        -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+#
+#    (Run from android/app/ so storeFile can be a relative path, or use an
+#    absolute path below. On macOS/Linux replace ^ with \ for line breaks.)
+#
+# 2. Copy this file to  android/key.properties  and fill in the real values.
+#    android/key.properties is gitignored and must NEVER be committed.
+#
+# 3. Build:  flutter build appbundle --dart-define=API_BASE_URL=https://your.api/api/v1
+
+storePassword=CHANGE_ME
+keyPassword=CHANGE_ME
+keyAlias=upload
+# Path to the keystore. Relative paths resolve against android/app/.
+# Example (keystore placed in android/app/):  storeFile=upload-keystore.jks
+# Or use an absolute path, e.g.:  storeFile=C:/keys/apxpro-upload.jks
+storeFile=upload-keystore.jks
