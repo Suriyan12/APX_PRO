@@ -1,0 +1,20 @@
+# Caddy automatically obtains and renews a Let's Encrypt TLS certificate for the
+# domain below, as long as the domain's DNS A record points at this server and
+# ports 80 + 443 are open. Replace BOTH the domain and the email.
+
+{
+	# Email used by Let's Encrypt for expiry notices.
+	email you@example.com
+}
+
+# ⬇️ Replace with your real API subdomain (must resolve to this server's IP).
+api.example.com {
+	encode gzip
+
+	# Allow large uploads (rehab exercise videos); matches MAX_REQUEST_BODY_MB.
+	request_body {
+		max_size 600MB
+	}
+
+	reverse_proxy api:8000
+}

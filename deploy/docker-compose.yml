@@ -1,0 +1,57 @@
+# APX PRO production stack: SQL Server + FastAPI app + Caddy (automatic HTTPS).
+#
+# Only Caddy is exposed to the internet (ports 80/443). The database and the API
+# are reachable ONLY on the internal Docker network — never published to the
+# host — so the DB port is not internet-facing.
+#
+# Usage (on the server):
+#   1. cp .env.example .env      && fill in real values
+#   2. put your firebase-service-account.json in ./secrets/
+#   3. edit Caddyfile: set your domain + email
+#   4. docker compose up -d --build
+#   5. one-time DB init — see README.md
+
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+      # Express = free AND licensed for production (10 GB/DB, ~1.4 GB RAM cap).
+      # Use "Standard"/"Enterprise" only with a purchased license.
+      MSSQL_PID: "Express"
+    volumes:
+      - mssql-data:/var/opt/mssql
+    restart: unless-stopped
+    # Note: port 1433 is intentionally NOT published to the host.
+
+  api:
+    build:
+      context: ../backend
+    env_file: .env
+    depends_on:
+      - db
+    volumes:
+      # Mount the FCM service account read-only instead of baking it into the
+      # image. Must match FIREBASE_CREDENTIALS_PATH in .env.
+      - ./secrets/firebase-service-account.json:/app/firebase-service-account.json:ro
+    restart: unless-stopped
+    # Note: port 8000 is intentionally NOT published — Caddy proxies it.
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  mssql-data:
+  caddy-data:
+  caddy-config:

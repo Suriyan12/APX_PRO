@@ -9,6 +9,12 @@ backend/oauth_client.json
 
 # Firebase Cloud Messaging service account (push notifications) — NEVER commit
 backend/firebase-service-account*.json
+# Any location (e.g. the deploy mount) — NEVER commit
+firebase-service-account*.json
+
+# Deployment secrets (real .env is covered above; keep the mounted creds out too)
+deploy/secrets/
+deploy/.env
 
 # Python
 venv/
@@ -28,3 +34,6 @@ local.properties
 
 # Android Studio
 .idea/
+
+# Deployment build artifact (rebuilt by `git archive`, see deploy/azure.md)
+backend.zip

@@ -1,0 +1,11 @@
+# Deployment archives only. `export-ignore` affects `git archive` and nothing
+# else (never checkout, clone, or builds).
+#
+# The Azure App Service zip is built with `git archive HEAD:backend`
+# (see deploy/azure.md). These paths are not needed at runtime and would
+# otherwise make every deploy upload 27 MB instead of ~130 KB:
+#   media/  - legacy local sample files; real uploads go to Google Drive
+#   tests/  - the suite never runs on the server
+media/ export-ignore
+tests/ export-ignore
+requirements-test.txt export-ignore
