@@ -143,7 +143,12 @@ class Appointment(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     patient_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    admin_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # No ondelete here on purpose. SQL Server rejects a table with two delete
+    # actions pointing at the same parent ("may cause cycles or multiple cascade
+    # paths"), so CREATE TABLE fails outright if this is SET NULL alongside
+    # patient_id's CASCADE. Nothing is lost: UserService.delete_user_and_data
+    # already nulls admin_id in Python before deleting the user.
+    admin_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     # Indexed: availability + overlap checks filter heavily on start_time, and
     # "my appointments" filters on patient_id (above).
     start_time = Column(DateTime(timezone=True), nullable=False, index=True)
@@ -214,7 +219,10 @@ class PostureScan(Base):
     video_path = Column(String(512), nullable=False)
     status = Column(SQLEnum(ScanStatus), nullable=False, default=ScanStatus.UPLOADING)
     feedback = Column(Text, nullable=True)
-    reviewed_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # No ondelete — same SQL Server multiple-cascade-path restriction as
+    # Appointment.admin_id above. UserService.delete_user_and_data nulls
+    # reviewed_by in Python before deleting the user.
+    reviewed_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), default=_utcnow)
     updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
