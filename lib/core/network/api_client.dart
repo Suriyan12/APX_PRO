@@ -11,8 +11,14 @@ class ApiClient {
     _dio = Dio(
       BaseOptions(
         baseUrl: AuthInterceptor.baseUrl,
-        connectTimeout: const Duration(seconds: 30),
-        receiveTimeout: const Duration(seconds: 30),
+        // 90s, not 30s. Sized for the worst case the client must survive: a
+        // backend that is itself waiting on a slow database connect (see the
+        // retry loop in backend/app/core/database.py). A 30s ceiling used to
+        // cancel requests the server would have served, leaving the home
+        // screen's eight parallel calls all rendering their empty states.
+        // Large medical-record and video uploads also need the headroom.
+        connectTimeout: const Duration(seconds: 90),
+        receiveTimeout: const Duration(seconds: 90),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',

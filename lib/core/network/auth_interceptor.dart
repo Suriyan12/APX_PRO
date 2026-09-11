@@ -95,9 +95,12 @@ class AuthInterceptor extends Interceptor {
     final refreshToken = await _storage.read(key: 'jwt_refresh_token');
     if (refreshToken == null) return false;
     try {
+      // Matches ApiClient's 90s on purpose: /auth/refresh hits the database
+      // too, so it must tolerate the same worst-case connect. A shorter
+      // timeout here fails the refresh and logs the user out spuriously.
       final bareDio = Dio(BaseOptions(
-        connectTimeout: const Duration(seconds: 30),
-        receiveTimeout: const Duration(seconds: 30),
+        connectTimeout: const Duration(seconds: 90),
+        receiveTimeout: const Duration(seconds: 90),
       ));
       final response = await bareDio.post(
         '$baseUrl/auth/refresh',
